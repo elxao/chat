@@ -116,7 +116,7 @@ function elxao_chat_replace_send_button_inner( $html, $size = 28 ){
 add_filter('do_shortcode_tag', function( $output, $tag, $attr ){
     if ( in_array( $tag, array( 'elxao_chat_window', 'elxao_chat_inbox' ), true ) ) {
         // Adjust size if you want a different icon scale (button is 44x44)
-        $output = elxao_chat_replace_send_button_inner( $output, 28 );
+        $output = elxao_chat_replace_send_button_inner( $output, 42 );
     }
     return $output;
 }, 10, 3);
