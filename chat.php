@@ -93,7 +93,7 @@ function elxao_chat_get_or_create_chat_for_project( $project_id ){
 
 /** Inline SVG markup with hard inline size (style) */
 if ( ! function_exists('elxao_chat_inline_send_svg') ) {
-function elxao_chat_inline_send_svg( $size = 36 ){
+function elxao_chat_inline_send_svg( $size = 40 ){
     $s = max(12, (int) $size); // change 36 -> 38/40 to taste when calling
     $svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true" focusable="false"'
          . ' style="width:'.$s.'px;height:'.$s.'px;display:block">'
@@ -104,7 +104,7 @@ function elxao_chat_inline_send_svg( $size = 36 ){
 
 /** Replace the inner HTML of the first <button class="send-icon">…</button> */
 if ( ! function_exists('elxao_chat_replace_send_button_inner') ) {
-function elxao_chat_replace_send_button_inner( $html, $size = 36 ){
+function elxao_chat_replace_send_button_inner( $html, $size = 40 ){
     $svg = elxao_chat_inline_send_svg( $size );
     $pattern = '/(<button[^>]*class="[^"]*send-icon[^"]*"[^>]*>)(.*?)(<\/button>)/is';
     return preg_replace( $pattern, '$1' . $svg . '$3', $html, 1 );
@@ -114,7 +114,7 @@ function elxao_chat_replace_send_button_inner( $html, $size = 36 ){
 add_filter('do_shortcode_tag', function( $output, $tag, $attr ){
     if ( in_array( $tag, array( 'elxao_chat_window', 'elxao_chat_inbox' ), true ) ) {
         // Button is 44x44. Adjust size here if needed (e.g., 38 or 40).
-        $output = elxao_chat_replace_send_button_inner( $output, 36 );
+        $output = elxao_chat_replace_send_button_inner( $output, 40 );
     }
     return $output;
 }, 10, 3);
