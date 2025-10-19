@@ -113,5 +113,24 @@ add_filter('do_shortcode_tag', function( $output, $tag, $attr ){
     return $output;
 }, 10, 3);
 
+add_action('wp_footer', function () { ?>
+<script>
+(function(){
+  // Target all send buttons, current and future
+  function resizeIcons(){
+    document.querySelectorAll('.send-icon svg').forEach(function(svg){
+      svg.style.setProperty('width','38px','important');   // change number here
+      svg.style.setProperty('height','38px','important');  // change number here
+      svg.style.setProperty('display','block','important');
+    });
+  }
+  // Initial pass
+  resizeIcons();
+  // Observe future DOM updates (AJAX, re-renders, etc.)
+  const mo = new MutationObserver(resizeIcons);
+  mo.observe(document.documentElement, {subtree:true, childList:true, attributes:true});
+})();
+</script>
+<?php });
 
 
