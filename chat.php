@@ -2,12 +2,12 @@
 /*
 Plugin Name: Chat
 Description: Private per-project chat (client, PM, admin) with read receipts and WhatsApp-style inbox sorting.
-Version: 1.2.3
+Version: 1.3.0
 Author: ELXAO
 */
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-if ( ! defined('ELXAO_CHAT_VERSION') ) define( 'ELXAO_CHAT_VERSION', '1.2.3' );
+if ( ! defined('ELXAO_CHAT_VERSION') ) define( 'ELXAO_CHAT_VERSION', '1.3.0' );
 if ( ! defined('ELXAO_CHAT_DIR') ) define( 'ELXAO_CHAT_DIR', plugin_dir_path( __FILE__ ) );
 if ( ! defined('ELXAO_CHAT_URL') ) define( 'ELXAO_CHAT_URL', plugin_dir_url( __FILE__ ) );
 if ( ! defined('ELXAO_CHAT_TABLE') ) define( 'ELXAO_CHAT_TABLE', 'elxao_chat_messages' );
@@ -18,6 +18,7 @@ require_once ELXAO_CHAT_DIR . 'includes/class-chat-ajax.php';
 require_once ELXAO_CHAT_DIR . 'includes/class-chat-list.php';
 require_once ELXAO_CHAT_DIR . 'includes/class-chat-inbox.php';
 
+/* ===== Activation ===== */
 if ( ! function_exists('elxao_chat_activate') ) {
 function elxao_chat_activate() {
     global $wpdb;
@@ -39,18 +40,43 @@ function elxao_chat_activate() {
     flush_rewrite_rules();
 }}
 register_activation_hook( __FILE__, 'elxao_chat_activate' );
-add_action( 'init', function(){ if ( class_exists('ELXAO_Chat_PostType') ) ELXAO_Chat_PostType::register_cpt(); } );
-add_action( 'save_post_project', function($id,$post,$update){ if ( class_exists('ELXAO_Chat_PostType') ) ELXAO_Chat_PostType::maybe_create_chat_for_project($id,$post,$update); }, 20, 3 );
-add_action( 'wp_enqueue_scripts', function(){ if ( class_exists('ELXAO_Chat_Render') ) ELXAO_Chat_Render::register_assets(); } );
 
-add_shortcode( 'elxao_chat_window', function($atts){ return class_exists('ELXAO_Chat_Render') ? ELXAO_Chat_Render::shortcode_chat_window($atts) : ''; } );
-add_shortcode( 'elxao_chat_list', function($atts){ return class_exists('ELXAO_Chat_List') ? ELXAO_Chat_List::shortcode_chat_list($atts) : ''; } );
-add_shortcode( 'elxao_chat_inbox', function($atts){ return class_exists('ELXAO_Chat_Inbox') ? ELXAO_Chat_Inbox::shortcode_chat_inbox($atts) : ''; } );
+add_action( 'init', function(){
+    if ( class_exists('ELXAO_Chat_PostType') )
+        ELXAO_Chat_PostType::register_cpt();
+});
+add_action( 'save_post_project', function($id,$post,$update){
+    if ( class_exists('ELXAO_Chat_PostType') )
+        ELXAO_Chat_PostType::maybe_create_chat_for_project($id,$post,$update);
+}, 20, 3 );
+add_action( 'wp_enqueue_scripts', function(){
+    if ( class_exists('ELXAO_Chat_Render') )
+        ELXAO_Chat_Render::register_assets();
+});
 
-add_action( 'wp_ajax_elxao_send_message', function(){ if ( class_exists('ELXAO_Chat_Ajax') ) ELXAO_Chat_Ajax::send_message(); } );
-add_action( 'wp_ajax_elxao_fetch_messages', function(){ if ( class_exists('ELXAO_Chat_Ajax') ) ELXAO_Chat_Ajax::fetch_messages(); } );
-add_action( 'wp_ajax_elxao_mark_read', function(){ if ( class_exists('ELXAO_Chat_Ajax') ) ELXAO_Chat_Ajax::mark_read(); } );
+/* ===== Shortcodes ===== */
+add_shortcode( 'elxao_chat_window', function($atts){
+    return class_exists('ELXAO_Chat_Render') ? ELXAO_Chat_Render::shortcode_chat_window($atts) : '';
+});
+add_shortcode( 'elxao_chat_list', function($atts){
+    return class_exists('ELXAO_Chat_List') ? ELXAO_Chat_List::shortcode_chat_list($atts) : '';
+});
+add_shortcode( 'elxao_chat_inbox', function($atts){
+    return class_exists('ELXAO_Chat_Inbox') ? ELXAO_Chat_Inbox::shortcode_chat_inbox($atts) : '';
+});
 
+/* ===== AJAX ===== */
+add_action( 'wp_ajax_elxao_send_message', function(){
+    if ( class_exists('ELXAO_Chat_Ajax') ) ELXAO_Chat_Ajax::send_message();
+});
+add_action( 'wp_ajax_elxao_fetch_messages', function(){
+    if ( class_exists('ELXAO_Chat_Ajax') ) ELXAO_Chat_Ajax::fetch_messages();
+});
+add_action( 'wp_ajax_elxao_mark_read', function(){
+    if ( class_exists('ELXAO_Chat_Ajax') ) ELXAO_Chat_Ajax::mark_read();
+});
+
+/* ===== Helper ===== */
 if ( ! function_exists('elxao_chat_user_can_access') ) {
 function elxao_chat_user_can_access( $project_id, $user_id = 0 ){
     if ( ! $project_id ) return false;
@@ -83,23 +109,40 @@ function elxao_chat_get_or_create_chat_for_project( $project_id ){
     return $chat_id;
 }}
 
-
-/* =============================================================================
- * Send button icon override — use SVG file in assets/icons/send.svg
- * - Replaces inner HTML of <button class="send-icon">…</button> with <img>.
- * - NO inline width/height: size is controlled by CSS.
- * ========================================================================== */
-
+/* ===== Force unified send icon (static file) ===== */
 if ( ! function_exists('elxao_chat_replace_send_button_inner') ) {
 function elxao_chat_replace_send_button_inner( $html ){
     $svg_url = ELXAO_CHAT_URL . 'assets/icons/send.svg';
-    $img = '<img src="' . esc_url( $svg_url ) . '" alt="Send" class="send-plane-icon" />';
+    $img = '<img src="' . esc_url( $svg_url ) . '" alt="Send" class="send-icon-img" />';
     $pattern = '/(<button[^>]*class="[^"]*send-icon[^"]*"[^>]*>)(.*?)(<\/button>)/is';
     return preg_replace( $pattern, '$1' . $img . '$3', $html, 1 );
 }}
-add_filter('do_shortcode_tag', function( $output, $tag, $attr ){
+add_filter('do_shortcode_tag', function( $output, $tag ){
     if ( in_array( $tag, array( 'elxao_chat_window', 'elxao_chat_inbox' ), true ) ) {
         $output = elxao_chat_replace_send_button_inner( $output );
     }
     return $output;
-}, 10, 3);
+}, 10, 2);
+
+/* ===== Auto-reapply icon after AJAX reloads ===== */
+add_action('wp_footer', function () {
+  $icon_url = esc_url( ELXAO_CHAT_URL . 'assets/icons/send.svg' );
+  ?>
+  <script>
+  (function(){
+    const ICON_URL = "<?php echo $icon_url; ?>";
+    function patchSendIcons(root){
+      (root || document).querySelectorAll('.send-icon').forEach(btn=>{
+        if (!btn.querySelector('img.send-icon-img')) {
+          btn.innerHTML = '<img src="'+ICON_URL+'" alt="Send" class="send-icon-img">';
+        }
+      });
+    }
+    patchSendIcons(document);
+    const mo = new MutationObserver(()=>patchSendIcons(document));
+    mo.observe(document.body, {subtree:true, childList:true});
+    if (window.jQuery) jQuery(document).ajaxComplete(()=>patchSendIcons(document));
+  })();
+  </script>
+  <?php
+});
