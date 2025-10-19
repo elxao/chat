@@ -85,36 +85,30 @@ function elxao_chat_get_or_create_chat_for_project( $project_id ){
 
 
 /* =============================================================================
- * Send button icon override (inline SVG, bigger, white)
- * We replace the inner HTML of <button class="send-icon">…</button>.
- * Icon color = currentColor (button already has color:#fff).
- * Icon size is forced to 40px with attributes + inline style + transform.
+ * Send button icon override (inline SVG, white, **no inline size**)
+ * - We replace the inner HTML of <button class="send-icon">…</button>.
+ * - Icon color = currentColor (button already has color:#fff).
+ * - **Size is controlled ONLY by CSS** (so your 24px/38px works).
  * ========================================================================== */
 
+/** Inline SVG with no width/height; CSS will size it */
 if ( ! function_exists('elxao_chat_inline_send_svg') ) {
-function elxao_chat_inline_send_svg( $size = 40 ){
-    $s = max(12, (int)$size);
-    // Attributes + inline style with !important + inner wrapper scale (belt & suspenders)
-    $svg  = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"'
-          . ' width="'.$s.'" height="'.$s.'"'
-          . ' aria-hidden="true" focusable="false"'
-          . ' style="width:'.$s.'px !important;height:'.$s.'px !important;display:block !important;">';
-    $svg .=   '<g style="transform:scale(1.02);transform-origin:center center;">';
-    $svg .=     '<path fill="currentColor" d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576L6.636 10.07Zm6.787-8.201L1.591 6.602l4.339 2.76l7.494-7.493Z"/>';
-    $svg .=   '</g></svg>';
-    return $svg;
+function elxao_chat_inline_send_svg() {
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true" focusable="false" style="display:block">'
+         . '<path fill="currentColor" d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576L6.636 10.07Zm6.787-8.201L1.591 6.602l4.339 2.76l7.494-7.493Z"/>'
+         . '</svg>';
 }}
-
+/** Replace the inner HTML of the first <button class="send-icon">…</button> */
 if ( ! function_exists('elxao_chat_replace_send_button_inner') ) {
-function elxao_chat_replace_send_button_inner( $html, $size = 40 ){
-    $svg = elxao_chat_inline_send_svg( $size );
+function elxao_chat_replace_send_button_inner( $html ){
+    $svg = elxao_chat_inline_send_svg();
     $pattern = '/(<button[^>]*class="[^"]*send-icon[^"]*"[^>]*>)(.*?)(<\/button>)/is';
     return preg_replace( $pattern, '$1' . $svg . '$3', $html, 1 );
 }}
-
+/** Apply replacement on shortcode output */
 add_filter('do_shortcode_tag', function( $output, $tag, $attr ){
     if ( in_array( $tag, array( 'elxao_chat_window', 'elxao_chat_inbox' ), true ) ) {
-        $output = elxao_chat_replace_send_button_inner( $output, 40 );
+        $output = elxao_chat_replace_send_button_inner( $output );
     }
     return $output;
 }, 10, 3);
