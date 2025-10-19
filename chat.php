@@ -2,12 +2,12 @@
 /*
 Plugin Name: Chat
 Description: Private per-project chat (client, PM, admin) with read receipts and WhatsApp-style inbox sorting.
-Version: 1.3.0
+Version: 1.3.1
 Author: ELXAO
 */
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-if ( ! defined('ELXAO_CHAT_VERSION') ) define( 'ELXAO_CHAT_VERSION', '1.3.0' );
+if ( ! defined('ELXAO_CHAT_VERSION') ) define( 'ELXAO_CHAT_VERSION', '1.3.1' );
 if ( ! defined('ELXAO_CHAT_DIR') ) define( 'ELXAO_CHAT_DIR', plugin_dir_path( __FILE__ ) );
 if ( ! defined('ELXAO_CHAT_URL') ) define( 'ELXAO_CHAT_URL', plugin_dir_url( __FILE__ ) );
 if ( ! defined('ELXAO_CHAT_TABLE') ) define( 'ELXAO_CHAT_TABLE', 'elxao_chat_messages' );
@@ -41,6 +41,7 @@ function elxao_chat_activate() {
 }}
 register_activation_hook( __FILE__, 'elxao_chat_activate' );
 
+/* ===== Init / assets ===== */
 add_action( 'init', function(){
     if ( class_exists('ELXAO_Chat_PostType') )
         ELXAO_Chat_PostType::register_cpt();
@@ -76,7 +77,7 @@ add_action( 'wp_ajax_elxao_mark_read', function(){
     if ( class_exists('ELXAO_Chat_Ajax') ) ELXAO_Chat_Ajax::mark_read();
 });
 
-/* ===== Helper ===== */
+/* ===== Helpers ===== */
 if ( ! function_exists('elxao_chat_user_can_access') ) {
 function elxao_chat_user_can_access( $project_id, $user_id = 0 ){
     if ( ! $project_id ) return false;
@@ -109,11 +110,11 @@ function elxao_chat_get_or_create_chat_for_project( $project_id ){
     return $chat_id;
 }}
 
-/* ===== Force unified send icon (static file) ===== */
+/* ===== Force unified send icon (static file) on server render ===== */
 if ( ! function_exists('elxao_chat_replace_send_button_inner') ) {
 function elxao_chat_replace_send_button_inner( $html ){
     $svg_url = ELXAO_CHAT_URL . 'assets/icons/send.svg';
-    $img = '<img src="' . esc_url( $svg_url ) . '" alt="Send" class="send-icon-img" />';
+    $img = '<img src="' . esc_url( $svg_url ) . '" alt="" class="send-icon-img" />';
     $pattern = '/(<button[^>]*class="[^"]*send-icon[^"]*"[^>]*>)(.*?)(<\/button>)/is';
     return preg_replace( $pattern, '$1' . $img . '$3', $html, 1 );
 }}
@@ -124,7 +125,7 @@ add_filter('do_shortcode_tag', function( $output, $tag ){
     return $output;
 }, 10, 2);
 
-/* ===== Auto-reapply icon after AJAX reloads ===== */
+/* ===== Reapply icon after AJAX / room switch & remove tooltips ===== */
 add_action('wp_footer', function () {
   $icon_url = esc_url( ELXAO_CHAT_URL . 'assets/icons/send.svg' );
   ?>
@@ -133,14 +134,17 @@ add_action('wp_footer', function () {
     const ICON_URL = "<?php echo $icon_url; ?>";
     function patchSendIcons(root){
       (root || document).querySelectorAll('.send-icon').forEach(btn=>{
+        // force same icon file
         if (!btn.querySelector('img.send-icon-img')) {
-          btn.innerHTML = '<img src="'+ICON_URL+'" alt="Send" class="send-icon-img">';
+          btn.innerHTML = '<img src="'+ICON_URL+'" alt="" class="send-icon-img">';
         }
+        // kill any tooltip/title attribute added by browsers/plugins
+        btn.removeAttribute('title');
       });
     }
     patchSendIcons(document);
     const mo = new MutationObserver(()=>patchSendIcons(document));
-    mo.observe(document.body, {subtree:true, childList:true});
+    mo.observe(document.body, {subtree:true, childList:true, attributes:true, attributeFilter:['class']});
     if (window.jQuery) jQuery(document).ajaxComplete(()=>patchSendIcons(document));
   })();
   </script>

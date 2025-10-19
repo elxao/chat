@@ -1,100 +1,152 @@
 /* ===========================================================
-   ELXAO Chat
+   ELXAO Chat Style
    =========================================================== */
 
-/* ---------- Design tokens ---------- */
 :root{
   --bg-app: #f7f7f8;
   --bg-card: #ffffff;
-  --bg-bubble-user: #e9f2ff;
+  --bg-bubble-user: #FFF6E0;      /* beige for sent messages */
   --text: #0b0b0c;
   --text-muted: #6b7280;
   --border: #e5e7eb;
   --shadow-sm: 0 1px 2px rgba(0,0,0,.06);
   --shadow-md: 0 8px 24px rgba(0,0,0,.06);
+  --shadow-lg: 0 12px 30px rgba(0,0,0,.10);
   --brand: #111827;
   --radius-lg: 12px;
   --radius-xl: 28px;
 }
 
-/* Inbox */
-.elxao-inbox{display:grid;grid-template-columns:340px 1fr;gap:16px;height:520px;align-items:stretch;}
-.elxao-inbox .inbox-left,.elxao-inbox .inbox-right{display:flex;flex-direction:column;min-height:0;}
-.elxao-inbox .inbox-left{border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:var(--bg-card);box-shadow:var(--shadow-sm);}
+/* ---------- Inbox layout (aligned heights) ---------- */
+.elxao-inbox{
+  display:grid;
+  grid-template-columns:340px 1fr;
+  gap:16px;
+  height:560px;                   /* unified height */
+  align-items:stretch;
+}
+.elxao-inbox .inbox-left,
+.elxao-inbox .inbox-right{display:flex;flex-direction:column;min-height:0;}
+.elxao-inbox .inbox-left{
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  overflow:hidden;
+  background:var(--bg-card);
+  box-shadow:var(--shadow-sm);
+}
 .elxao-inbox .inbox-right{gap:12px;}
-.elxao-inbox .inbox-search{padding:8px;border-bottom:1px solid var(--border);}
+.elxao-inbox .inbox-search{padding:8px;border-bottom:1px solid var(--border);background:var(--bg-card);}
 .elxao-inbox .inbox-search-input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;}
-.elxao-inbox .inbox-list{overflow-y:auto;flex:1;min-height:0;}
+.elxao-inbox .inbox-list{overflow-y:auto;flex:1;min-height:0;background:var(--bg-card);}
 .elxao-inbox .thread{display:flex;gap:10px;padding:10px 12px;cursor:pointer;border-bottom:1px solid #f3f4f6;align-items:center;}
 .elxao-inbox .thread:hover{background:#fafafa;}
 .elxao-inbox .thread.active{background:#f3f4f6;}
 .elxao-inbox .thread .avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:#fff;}
 .elxao-inbox .thread .meta{flex:1;min-width:0;}
-.elxao-inbox .thread .title{font-weight:700;color:var(--text);}
-.elxao-inbox .thread .time{font-size:12px;color:var(--text-muted);}
-.elxao-inbox .thread .preview{color:#374151;}
+.elxao-inbox .thread .row{display:flex;justify-content:space-between;gap:10px;}
+.elxao-inbox .thread .title{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);}
+.elxao-inbox .thread .time{font-size:12px;color:var(--text-muted);white-space:nowrap;}
+.elxao-inbox .thread .preview{color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
-/* Chat window */
-.elxao-chat-window{border:1px solid var(--border);border-radius:var(--radius-lg);display:flex;flex-direction:column;background:var(--bg-app);padding:0 12px 12px;}
-.elxao-chat-messages{padding:16px 0;overflow-y:auto;flex:1;min-height:0;}
-.elxao-chat-message{margin-bottom:12px;display:flex;gap:8px;}
-.elxao-chat-message .bubble{padding:10px 12px;border-radius:12px;background:#fff;box-shadow:var(--shadow-sm);max-width:85%;font-size:14px;line-height:1.45;}
+/* ---------- Chat window (same visual height; soft background) ---------- */
+.elxao-chat-window{
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  overflow:hidden;                /* keep shadows inside the box */
+  display:flex;flex-direction:column;flex:1;min-height:0;
+  background:var(--bg-app);
+  padding:12px;                   /* breathing space */
+  box-shadow:var(--shadow-sm);
+}
+.elxao-chat-messages{
+  padding:16px 0;                 /* no side padding; window handles sides */
+  overflow-y:auto;flex:1;min-height:0;background:var(--bg-app);
+}
+.elxao-chat-loading{color:var(--text-muted);font-size:13px;}
+.elxao-chat-message{margin:0 0 12px;display:flex;gap:8px;align-items:flex-end;}
+.elxao-chat-message .bubble{
+  padding:10px 12px;border-radius:12px;background:#fff;box-shadow:0 1px 1px rgba(0,0,0,0.04);
+  max-width:85%;font-size:14px;line-height:1.45;color:var(--text);
+}
 .elxao-chat-message.me{justify-content:flex-end;}
-.elxao-chat-message.me .bubble{background:var(--bg-bubble-user);}
+.elxao-chat-message.me .bubble{background:var(--bg-bubble-user);} /* beige sent bubble */
 .elxao-chat-meta{font-size:11px;color:var(--text-muted);margin-top:4px;display:flex;align-items:center;gap:6px;}
+.elxao-chat-meta .ticks{display:inline-block;vertical-align:middle;}
 
-/* Input capsule */
+/* ---------- Input capsule (ChatGPT-like) ---------- */
 .elxao-chat-input{
   position:relative;
+  display:block;
   background:var(--bg-card);
   border:1px solid var(--border);
   border-radius:var(--radius-xl);
   padding:10px 12px;
-  box-shadow:var(--shadow-md);
+  box-shadow:0 6px 18px rgba(0,0,0,.06); /* softer to live inside overflow:hidden */
+}
+.elxao-chat-input:focus-within{
+  border-color:#d1d5db; box-shadow:var(--shadow-lg);
 }
 .elxao-chat-input textarea{
   width:100%;
   background:transparent;
-  border:0;
-  outline:0;
+  border:0; outline:0;
   color:var(--text);
-  font-size:16px;
-  line-height:1.4;
-  resize:vertical;
-  min-height:48px;
-  max-height:200px;
-  padding:12px 64px 12px 14px;
+  font-size:16px; line-height:1.4;
+  resize:none;                      /* remove draggable handle */
+  min-height:48px; max-height:200px;
+  padding:12px 64px 12px 14px;      /* space at right for send button */
   border-radius:20px;
+  -ms-overflow-style: none;         /* IE/Edge legacy */
+  scrollbar-width: thin;
 }
-.elxao-chat-input textarea::placeholder{color:#9ca3af;}
+.elxao-chat-input textarea::-webkit-resizer{ display:none !important; }
 
-/* Send button */
+/* ---------- Send button integrated ---------- */
 .elxao-chat-input .send-icon{
-  position:absolute;
-  right:10px;
-  top:50%;
-  transform:translateY(-50%);
-  width:40px;
-  height:40px;
-  border-radius:9999px;
-  background:var(--brand);
-  color:#fff;
-  border:0;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
+  position:absolute; right:10px; top:50%; transform:translateY(-50%);
+  width:40px; height:40px; border-radius:9999px; border:0;
+  background:var(--brand); color:#fff;
+  display:inline-flex; align-items:center; justify-content:center;
   box-shadow:0 2px 6px rgba(0,0,0,.10);
-  padding:0;
-  line-height:0;
+  cursor:pointer; padding:0; line-height:0; gap:0;
   transition:all .15s ease;
 }
-.elxao-chat-input .send-icon:hover{filter:brightness(1.05);box-shadow:0 4px 10px rgba(0,0,0,.14);}
-.elxao-chat-input .send-icon:disabled{opacity:.6;cursor:not-allowed;}
+.elxao-chat-input .send-icon:hover{ filter:brightness(1.05); box-shadow:0 4px 10px rgba(0,0,0,.14); }
+.elxao-chat-input .send-icon:disabled{ opacity:.6; cursor:not-allowed; }
 
-/* Unified icon size */
+/* Unified icon sizing (SVG or IMG) */
 .elxao-chat-input .send-icon > img.send-icon-img,
 .elxao-chat-input .send-icon > svg{
   width:22px !important;
   height:22px !important;
   display:block !important;
+}
+
+/* ---------- Cards ---------- */
+.elxao-chat-list{margin:8px 0 20px;}
+.elxao-chat-list-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.elxao-chat-list-header h3{margin:0;font-size:16px;font-weight:700;color:var(--text);}
+.elxao-chat-search{border:1px solid var(--border);border-radius:10px;padding:8px 10px;background:#fff;}
+.elxao-chat-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;}
+.elxao-chat-card{
+  border:1px solid var(--border); border-radius:var(--radius-lg);
+  background:#fff; padding:12px; display:flex; flex-direction:column; gap:8px;
+  box-shadow:var(--shadow-sm);
+}
+.elxao-chat-card .title{font-weight:700;color:var(--text);}
+.elxao-chat-card .meta{font-size:12px;color:var(--text-muted);}
+.elxao-chat-card .preview{font-size:13px;color:#111827;}
+.elxao-chat-card .preview.empty{color:#9ca3af;font-style:italic;}
+.elxao-chat-card-actions{display:flex;gap:8px;}
+.elxao-chat-card .btn{background:var(--brand);color:#fff;border:0;border-radius:8px;padding:6px 10px;cursor:pointer;font-weight:600;}
+.elxao-chat-card .btn.btn-link{background:transparent;color:#2563eb;padding:0;}
+.elxao-chat-inline{margin-top:8px;}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 900px){
+  .elxao-inbox{grid-template-columns:1fr;height:auto;}
+  .elxao-chat-input{border-radius:24px;}
+  .elxao-chat-input .send-icon{right:8px;width:38px;height:38px;}
+  .elxao-chat-input .send-icon > img.send-icon-img,
+  .elxao-chat-input .send-icon > svg{width:20px !important;height:20px !important;}
 }
