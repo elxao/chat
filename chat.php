@@ -85,22 +85,28 @@ function elxao_chat_get_or_create_chat_for_project( $project_id ){
 
 
 /* =============================================================================
- * Force the send button to use the airplane SVG (inline, white on dark)
- * Icon color = currentColor (#fff)
- * Icon size = 38px (inline !important overrides everything)
+ * Send button icon override (inline SVG, bigger, white)
+ * We replace the inner HTML of <button class="send-icon">…</button>.
+ * Icon color = currentColor (button already has color:#fff).
+ * Icon size is forced to 40px with attributes + inline style + transform.
  * ========================================================================== */
 
 if ( ! function_exists('elxao_chat_inline_send_svg') ) {
-function elxao_chat_inline_send_svg( $size = 38 ){
-    $s = max(12, (int) $size);
-    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true" focusable="false"'
-         . ' style="width:'.$s.'px !important;height:'.$s.'px !important;display:block !important;">'
-         . '<path fill="currentColor" d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576L6.636 10.07Zm6.787-8.201L1.591 6.602l4.339 2.76l7.494-7.493Z"/>'
-         . '</svg>';
+function elxao_chat_inline_send_svg( $size = 40 ){
+    $s = max(12, (int)$size);
+    // Attributes + inline style with !important + inner wrapper scale (belt & suspenders)
+    $svg  = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"'
+          . ' width="'.$s.'" height="'.$s.'"'
+          . ' aria-hidden="true" focusable="false"'
+          . ' style="width:'.$s.'px !important;height:'.$s.'px !important;display:block !important;">';
+    $svg .=   '<g style="transform:scale(1.02);transform-origin:center center;">';
+    $svg .=     '<path fill="currentColor" d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576L6.636 10.07Zm6.787-8.201L1.591 6.602l4.339 2.76l7.494-7.493Z"/>';
+    $svg .=   '</g></svg>';
+    return $svg;
 }}
 
 if ( ! function_exists('elxao_chat_replace_send_button_inner') ) {
-function elxao_chat_replace_send_button_inner( $html, $size = 38 ){
+function elxao_chat_replace_send_button_inner( $html, $size = 40 ){
     $svg = elxao_chat_inline_send_svg( $size );
     $pattern = '/(<button[^>]*class="[^"]*send-icon[^"]*"[^>]*>)(.*?)(<\/button>)/is';
     return preg_replace( $pattern, '$1' . $svg . '$3', $html, 1 );
@@ -108,29 +114,7 @@ function elxao_chat_replace_send_button_inner( $html, $size = 38 ){
 
 add_filter('do_shortcode_tag', function( $output, $tag, $attr ){
     if ( in_array( $tag, array( 'elxao_chat_window', 'elxao_chat_inbox' ), true ) ) {
-        $output = elxao_chat_replace_send_button_inner( $output, 38 );
+        $output = elxao_chat_replace_send_button_inner( $output, 40 );
     }
     return $output;
 }, 10, 3);
-
-add_action('wp_footer', function () { ?>
-<script>
-(function(){
-  // Target all send buttons, current and future
-  function resizeIcons(){
-    document.querySelectorAll('.send-icon svg').forEach(function(svg){
-      svg.style.setProperty('width','38px','important');   // change number here
-      svg.style.setProperty('height','38px','important');  // change number here
-      svg.style.setProperty('display','block','important');
-    });
-  }
-  // Initial pass
-  resizeIcons();
-  // Observe future DOM updates (AJAX, re-renders, etc.)
-  const mo = new MutationObserver(resizeIcons);
-  mo.observe(document.documentElement, {subtree:true, childList:true, attributes:true});
-})();
-</script>
-<?php });
-
-
