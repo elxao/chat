@@ -49,3 +49,11 @@
 .elxao-chat-card .btn{background:#111827;color:#fff;border:0;border-radius:8px;padding:6px 10px;cursor:pointer;font-weight:600;}
 .elxao-chat-card .btn.btn-link{background:transparent;color:#2563eb;padding:0;}
 .elxao-chat-inline{margin-top:8px;}
+
+/* Taille de l’icône avion dans le bouton 44x44 */
+.elxao-chat-input .send-icon svg{
+  width:36px !important;
+  height:36px !important;
+  display:block;
+}
+
