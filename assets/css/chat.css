@@ -27,22 +27,60 @@
 .elxao-chat-meta{font-size:11px;color:#6b7280;margin-top:4px;display:flex;align-items:center;gap:6px;}
 .elxao-chat-meta .ticks{display:inline-block;vertical-align:middle;}
 
-/* Input */
-.elxao-chat-input{border-top:1px solid #e5e7eb;padding:8px;display:grid;grid-template-columns:1fr auto;gap:8px;background:#fff;align-items:end;}
-.elxao-chat-input textarea{width:100%;border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;resize:vertical;min-height:44px;max-height:120px;font-size:14px;}
-.elxao-chat-input .send-icon{
-  width:44px;height:44px;border-radius:9999px;border:0;background:#111827;color:#fff;
-  display:flex;align-items:center;justify-content:center;box-shadow:0 1px 2px rgba(0,0,0,0.06);cursor:pointer;
-  padding:0 !important;line-height:0 !important;gap:0 !important; /* supprime tout espace interne */
+/* ===================== Input – style “ChatGPT” ===================== */
+.elxao-chat-input{
+  position:relative;
+  display:block;                  /* remplace l’ancien grid */
+  background:#fff;
+  border:1px solid #e5e7eb;
+  border-radius:28px;
+  padding:10px 12px;
+  box-shadow:0 8px 24px rgba(0,0,0,.06);
 }
-.elxao-chat-input .send-icon:hover{filter:brightness(1.05);box-shadow:0 2px 6px rgba(0,0,0,0.08);}
+
+.elxao-chat-input:focus-within{
+  border-color:#d1d5db;
+  box-shadow:0 10px 28px rgba(0,0,0,.08);
+}
+
+.elxao-chat-input textarea{
+  width:100%;
+  background:transparent;
+  border:0;
+  outline:0;
+  font-size:16px;
+  line-height:1.4;
+  resize:vertical;
+  min-height:48px;
+  max-height:160px;
+  padding:12px 64px 12px 14px;   /* espace à droite pour le bouton */
+  border-radius:20px;             /* douceur si le texte wrappe */
+}
+.elxao-chat-input textarea::-webkit-resizer{display:none;}
+
+.elxao-chat-input .send-icon{
+  position:absolute;
+  right:10px;
+  bottom:10px;
+  width:40px;height:40px;
+  border-radius:9999px;
+  border:0;
+  background:#111827;color:#fff;
+  display:inline-flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.10);
+  cursor:pointer;
+  padding:0 !important;line-height:0 !important;gap:0 !important;
+}
+.elxao-chat-input .send-icon:hover{filter:brightness(1.05);box-shadow:0 4px 10px rgba(0,0,0,.14);}
 .elxao-chat-input .send-icon:disabled{opacity:.6;cursor:not-allowed;}
 
-/* Icône avion dans le bouton 44x44 (inline SVG / img / i) */
+/* Taille de l’icône (SVG/IMG) dans le bouton */
 .elxao-chat-input .send-icon > svg,
 .elxao-chat-input .send-icon > img,
 .elxao-chat-input .send-icon > i{
-  width:20px !important;height:20px !important;display:block !important;
+  width:20px !important;
+  height:20px !important;
+  display:block !important;
 }
 .elxao-chat-input .send-icon > svg path{stroke-width:2 !important;}
 
