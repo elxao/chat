@@ -3,7 +3,7 @@
   function qa(sel, ctx){ return Array.prototype.slice.call((ctx||document).querySelectorAll(sel)); }
 
   function findThreadEl(chatId){
-    return q('.elxao-inbox .threads .thread[data-chat-id="'+chatId+'"]') ||
+    return q('.elxao-inbox .inbox-list .thread[data-chat="'+chatId+'"]') ||
            q('.elxao-chat-card[data-chat="'+chatId+'"]');
   }
 
@@ -14,7 +14,10 @@
       if (!badge) {
         badge = document.createElement('span');
         badge.className = 'badge';
-        el.querySelector('.head, .elxao-chat-card-head')?.appendChild(badge);
+        var host = el.querySelector('.title-wrap, .elxao-chat-card-head');
+        if (host) {
+          host.appendChild(badge);
+        }
       }
       badge.textContent = String(count);
       el.classList.add('has-unread');
@@ -56,7 +59,7 @@
 
   // If DOM already contains unread counts per thread via data-unread, reflect it
   function initFromDom(){
-    qa('.elxao-inbox .threads .thread, .elxao-chat-card').forEach(function(el){
+    qa('.elxao-inbox .inbox-list .thread, .elxao-chat-card').forEach(function(el){
       var c = parseInt(el.getAttribute('data-unread')||'0',10);
       if (c>0) setBadge(el, c);
     });
@@ -67,7 +70,7 @@
     var needInit=false;
     muts.forEach(function(m){
       Array.prototype.forEach.call(m.addedNodes || [], function(n){
-        if (n.nodeType===1 && (n.matches('.elxao-inbox, .threads, .elxao-chat-card') || n.querySelector?.('.elxao-chat-card,.threads'))) {
+        if (n.nodeType===1 && (n.matches('.elxao-inbox, .inbox-list, .elxao-chat-card') || (n.querySelector && n.querySelector('.elxao-chat-card, .thread')))) {
           needInit=true;
         }
       });
