@@ -2,317 +2,134 @@
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 if ( ! class_exists('ELXAO_Chat_Ajax') ) {
 class ELXAO_Chat_Ajax {
-    private static function sync_participants( $chat_id, $user_id = 0 ) {
-        if ( function_exists( 'elxao_chat_sync_participants' ) ) {
-            elxao_chat_sync_participants( $chat_id );
-        }
-        if ( $user_id && function_exists( 'elxao_chat_ensure_participant' ) ) {
-            elxao_chat_ensure_participant( $chat_id, $user_id );
-        }
-    }
-
-    private static function get_participants_state( $chat_id ) {
-        return function_exists( 'elxao_chat_get_participants_state' )
-            ? elxao_chat_get_participants_state( $chat_id )
-            : [];
-    }
-
-    private static function formatted_participants_state( $chat_id, $participants = null ) {
-        return function_exists( 'elxao_chat_format_participants_state' )
-            ? elxao_chat_format_participants_state( $chat_id, $participants )
-            : [];
-    }
-
-    private static function resolve_role( $chat_id, $user_id, $participants ) {
-        if ( isset( $participants[ $user_id ]['role'] ) ) {
-            return $participants[ $user_id ]['role'];
-        }
-        if ( function_exists( 'elxao_chat_get_user_role_in_chat' ) ) {
-            return elxao_chat_get_user_role_in_chat( $chat_id, $user_id );
-        }
-        return null;
-    }
-
-    private static function status_payload( $message_id, $sender_role, $participants, $pm_id, $client_id, $is_mine ) {
-        $client_state = $client_id ? ( $participants[ $client_id ] ?? null ) : null;
-        $pm_state     = $pm_id ? ( $participants[ $pm_id ] ?? null ) : null;
-
-        $result = [
-            'status'              => $is_mine ? 'sent' : '',
-            'delivered'           => false,
-            'read'                => false,
-            'recipient_breakdown' => [],
-        ];
-
-        if ( ! $is_mine ) {
-            return $result;
-        }
-
-        if ( 'pm' === $sender_role ) {
-            $dest = $client_state;
-        } elseif ( 'client' === $sender_role ) {
-            $dest = $pm_state;
-        } elseif ( 'admin' === $sender_role ) {
-            $result['recipient_breakdown']['client'] = [
-                'delivered' => $client_state ? ( $client_state['last_delivered'] >= $message_id ) : false,
-                'read'      => $client_state ? ( $client_state['last_read'] >= $message_id ) : false,
-            ];
-            $result['recipient_breakdown']['pm'] = [
-                'delivered' => $pm_state ? ( $pm_state['last_delivered'] >= $message_id ) : false,
-                'read'      => $pm_state ? ( $pm_state['last_read'] >= $message_id ) : false,
-            ];
-            $targets       = [];
-            $has_target    = false;
-            $all_delivered = true;
-            $all_read      = true;
-
-            if ( $client_id ) {
-                $targets[] = $client_state;
-            }
-            if ( $pm_id ) {
-                $targets[] = $pm_state;
-            }
-
-            foreach ( $targets as $target ) {
-                if ( ! $target ) {
-                    $all_delivered = false;
-                    $all_read      = false;
-                    continue;
-                }
-                $has_target = true;
-                if ( $target['last_delivered'] < $message_id ) {
-                    $all_delivered = false;
-                }
-                if ( $target['last_read'] < $message_id ) {
-                    $all_read = false;
-                }
-            }
-
-            if ( $has_target && $all_read ) {
-                $result['status']    = 'read';
-                $result['delivered'] = true;
-                $result['read']      = true;
-            } elseif ( $has_target && $all_delivered ) {
-                $result['status']    = 'delivered';
-                $result['delivered'] = true;
-            } else {
-                $result['status'] = 'sent';
-            }
-
-            return $result;
-        } else {
-            $dest = null;
-        }
-
-        if ( $dest ) {
-            if ( $dest['last_read'] >= $message_id ) {
-                $result['status']    = 'read';
-                $result['delivered'] = true;
-                $result['read']      = true;
-            } elseif ( $dest['last_delivered'] >= $message_id ) {
-                $result['status']    = 'delivered';
-                $result['delivered'] = true;
-            }
-        }
-
-        return $result;
-    }
+    private static function key_read( $chat_id, $user_id ){ return '_elxao_chat_read_' . intval($chat_id); }
+    private static function key_delivered( $chat_id, $user_id ){ return '_elxao_chat_delivered_' . intval($chat_id); }
 
     public static function send_message(){
         check_ajax_referer( 'elxao_chat_nonce', 'nonce' );
-        if ( ! is_user_logged_in() ) {
-            wp_send_json_error( [ 'message' => 'Not logged in' ], 401 );
-        }
-        $chat_id = isset( $_POST['chat_id'] ) ? intval( $_POST['chat_id'] ) : 0;
-        $text    = isset( $_POST['text'] ) ? wp_unslash( $_POST['text'] ) : '';
-        if ( ! $chat_id || '' === trim( $text ) ) {
-            wp_send_json_error( [ 'message' => 'Missing data' ], 400 );
-        }
+        if ( ! is_user_logged_in() ) wp_send_json_error( ['message' => 'Not logged in'], 401 );
+        $chat_id = isset($_POST['chat_id']) ? intval($_POST['chat_id']) : 0;
+        $text    = isset($_POST['text']) ? wp_unslash( $_POST['text'] ) : '';
+        if ( ! $chat_id || '' === trim( $text ) ) wp_send_json_error( ['message' => 'Missing data'], 400 );
         $project_id = (int) get_post_meta( $chat_id, 'project_id', true );
-        if ( ! $project_id ) {
-            wp_send_json_error( [ 'message' => 'Invalid chat' ], 400 );
-        }
-        $user_id = get_current_user_id();
-        if ( ! elxao_chat_user_can_access( $project_id, $user_id ) ) {
-            wp_send_json_error( [ 'message' => 'Forbidden' ], 403 );
-        }
-
-        global $wpdb;
-        $table = $wpdb->prefix . ELXAO_CHAT_TABLE;
-        $now   = current_time( 'mysql' );
-        $ins   = $wpdb->insert(
-            $table,
-            [
-                'chat_id'    => $chat_id,
-                'sender_id'  => $user_id,
-                'message'    => wp_kses_post( $text ),
-                'created_at' => $now,
-            ],
-            [ '%d', '%d', '%s', '%s' ]
-        );
-        if ( ! $ins ) {
-            wp_send_json_error( [ 'message' => 'DB insert failed' ], 500 );
-        }
-
-        $message_id = (int) $wpdb->insert_id;
-        self::sync_participants( $chat_id, $user_id );
-
-        update_post_meta( $chat_id, 'last_message_at', $now );
-        update_post_meta( $chat_id, 'last_message_id', $message_id );
-
-        wp_send_json_success( [ 'message' => 'ok', 'id' => $message_id ] );
+        if ( ! $project_id ) wp_send_json_error( ['message' => 'Invalid chat'], 400 );
+        $user_id = get_current_user_id(); if ( ! elxao_chat_user_can_access( $project_id, $user_id ) ) wp_send_json_error( ['message' => 'Forbidden'], 403 );
+        global $wpdb; $table = $wpdb->prefix . ELXAO_CHAT_TABLE;
+        $ins = $wpdb->insert( $table, ['chat_id'=>$chat_id,'sender_id'=>$user_id,'message'=>wp_kses_post($text),'created_at'=>current_time('mysql')], ['%d','%d','%s','%s'] );
+        if ( ! $ins ) wp_send_json_error( ['message' => 'DB insert failed'], 500 );
+        wp_send_json_success( ['message' => 'ok'] );
     }
 
     public static function mark_read(){
         check_ajax_referer( 'elxao_chat_nonce', 'nonce' );
-        if ( ! is_user_logged_in() ) {
-            wp_send_json_error( [ 'message' => 'Not logged in' ], 401 );
-        }
-        $chat_id = isset( $_POST['chat_id'] ) ? intval( $_POST['chat_id'] ) : 0;
-        $last_id = isset( $_POST['last_id'] ) ? intval( $_POST['last_id'] ) : 0;
-        if ( ! $chat_id || ! $last_id ) {
-            wp_send_json_error( [ 'message' => 'Missing data' ], 400 );
-        }
+        if ( ! is_user_logged_in() ) wp_send_json_error( ['message' => 'Not logged in'], 401 );
+        $chat_id = isset($_POST['chat_id']) ? intval($_POST['chat_id']) : 0;
+        $last_id = isset($_POST['last_id']) ? intval($_POST['last_id']) : 0;
+        if ( ! $chat_id || ! $last_id ) wp_send_json_error( ['message' => 'Missing data'], 400 );
         $project_id = (int) get_post_meta( $chat_id, 'project_id', true );
-        if ( ! $project_id ) {
-            wp_send_json_error( [ 'message' => 'Invalid chat' ], 400 );
-        }
-        $user_id = get_current_user_id();
-        if ( ! elxao_chat_user_can_access( $project_id, $user_id ) ) {
-            wp_send_json_error( [ 'message' => 'Forbidden' ], 403 );
-        }
+        if ( ! $project_id ) wp_send_json_error( ['message' => 'Invalid chat'], 400 );
+        $user_id = get_current_user_id(); if ( ! elxao_chat_user_can_access( $project_id, $user_id ) ) wp_send_json_error( ['message' => 'Forbidden'], 403 );
+        $key = self::key_read( $chat_id, $user_id );
+        $current = (int) get_user_meta( $user_id, $key, true );
+        if ( $last_id > $current ) update_user_meta( $user_id, $key, $last_id );
+        wp_send_json_success( ['ok'=>true] );
+    }
 
-        self::sync_participants( $chat_id, $user_id );
-        if ( function_exists( 'elxao_chat_update_participant_progress' ) ) {
-            elxao_chat_update_participant_progress( $chat_id, $user_id, 'last_read_message_id', $last_id );
-            elxao_chat_update_participant_progress( $chat_id, $user_id, 'last_delivered_message_id', $last_id );
+    private static function others_read_upto( $chat_id, $sender_id ){
+        $pm_id = (int) get_post_meta( $chat_id, 'pm_id', true );
+        $client_id = (int) get_post_meta( $chat_id, 'client_id', true );
+        $participants = array_filter([$pm_id,$client_id]);
+        $others = array_filter($participants, function($uid) use($sender_id){ return $uid && $uid != $sender_id; });
+        if ( empty($others) ) return 0;
+        $min = PHP_INT_MAX;
+        foreach( $others as $uid ){
+            $v = (int) get_user_meta( $uid, self::key_read($chat_id,$uid), true );
+            if ( $v < $min ) $min = $v;
         }
+        return $min === PHP_INT_MAX ? 0 : $min;
+    }
 
-        $participants = self::formatted_participants_state( $chat_id );
-        wp_send_json_success( [ 'ok' => true, 'participants' => $participants ] );
+    private static function others_delivered_upto( $chat_id, $sender_id ){
+        $pm_id = (int) get_post_meta( $chat_id, 'pm_id', true );
+        $client_id = (int) get_post_meta( $chat_id, 'client_id', true );
+        $participants = array_filter([$pm_id,$client_id]);
+        $others = array_filter($participants, function($uid) use($sender_id){ return $uid && $uid != $sender_id; });
+        if ( empty($others) ) return 0;
+        $min = PHP_INT_MAX;
+        foreach( $others as $uid ){
+            $v = (int) get_user_meta( $uid, self::key_delivered($chat_id,$uid), true );
+            if ( $v < $min ) $min = $v;
+        }
+        return $min === PHP_INT_MAX ? 0 : $min;
+    }
+
+    private static function mark_delivered_for_user( $chat_id, $user_id, $rows ){
+        if ( empty( $rows ) ) return;
+        $max = 0;
+        foreach( $rows as $r ){
+            if ( (int) $r['sender_id'] === $user_id ) continue;
+            $id = (int) $r['id'];
+            if ( $id > $max ) $max = $id;
+        }
+        if ( ! $max ) return;
+        $key     = self::key_delivered( $chat_id, $user_id );
+        $current = (int) get_user_meta( $user_id, $key, true );
+        if ( $max > $current ) update_user_meta( $user_id, $key, $max );
     }
 
     public static function fetch_messages(){
         check_ajax_referer( 'elxao_chat_nonce', 'nonce' );
-        if ( ! is_user_logged_in() ) {
-            wp_send_json_error( [ 'message' => 'Not logged in' ], 401 );
-        }
-        $chat_id  = isset( $_POST['chat_id'] ) ? intval( $_POST['chat_id'] ) : 0;
-        $after_id = isset( $_POST['after_id'] ) ? intval( $_POST['after_id'] ) : 0;
-        if ( ! $chat_id ) {
-            wp_send_json_error( [ 'message' => 'Missing chat_id' ], 400 );
-        }
-        $project_id = (int) get_post_meta( $chat_id, 'project_id', true );
-        if ( ! $project_id ) {
-            wp_send_json_error( [ 'message' => 'Invalid chat' ], 400 );
-        }
-        $user_id = get_current_user_id();
-        if ( ! elxao_chat_user_can_access( $project_id, $user_id ) ) {
-            wp_send_json_error( [ 'message' => 'Forbidden' ], 403 );
-        }
-
-        global $wpdb;
-        $table = $wpdb->prefix . ELXAO_CHAT_TABLE;
+        if ( ! is_user_logged_in() ) wp_send_json_error( ['message' => 'Not logged in'], 401 );
+        $chat_id = isset($_POST['chat_id']) ? intval($_POST['chat_id']) : 0;
+        $after_id = isset($_POST['after_id']) ? intval($_POST['after_id']) : 0;
+        if ( ! $chat_id ) wp_send_json_error( ['message' => 'Missing chat_id'], 400 );
+        $project_id = (int) get_post_meta( $chat_id, 'project_id', true ); if ( ! $project_id ) wp_send_json_error( ['message' => 'Invalid chat'], 400 );
+        $user_id = get_current_user_id(); if ( ! elxao_chat_user_can_access( $project_id, $user_id ) ) wp_send_json_error( ['message' => 'Forbidden'], 403 );
+        global $wpdb; $table = $wpdb->prefix . ELXAO_CHAT_TABLE;
         if ( $after_id > 0 ) {
-            $rows = $wpdb->get_results(
-                $wpdb->prepare(
-                    "SELECT id, sender_id, message, created_at FROM {$table} WHERE chat_id=%d AND id>%d ORDER BY id ASC LIMIT 200",
-                    $chat_id,
-                    $after_id
-                ),
-                ARRAY_A
-            );
+            $rows = $wpdb->get_results( $wpdb->prepare("SELECT id, sender_id, message, created_at FROM {$table} WHERE chat_id=%d AND id>%d ORDER BY id ASC LIMIT 200", $chat_id, $after_id ), ARRAY_A );
         } else {
-            $rows = $wpdb->get_results(
-                $wpdb->prepare(
-                    "SELECT id, sender_id, message, created_at FROM {$table} WHERE chat_id=%d ORDER BY id ASC LIMIT 200",
-                    $chat_id
-                ),
-                ARRAY_A
-            );
+            $rows = $wpdb->get_results( $wpdb->prepare("SELECT id, sender_id, message, created_at FROM {$table} WHERE chat_id=%d ORDER BY id ASC LIMIT 200", $chat_id ), ARRAY_A );
         }
-
-        self::sync_participants( $chat_id, $user_id );
-        $participants = self::get_participants_state( $chat_id );
-
-        $max_id = 0;
-        foreach ( $rows as $row ) {
-            $mid = (int) $row['id'];
-            if ( $mid > $max_id ) {
-                $max_id = $mid;
-            }
-        }
-        if ( $max_id && function_exists( 'elxao_chat_update_participant_progress' ) ) {
-            elxao_chat_update_participant_progress( $chat_id, $user_id, 'last_delivered_message_id', $max_id );
-        }
-
-        $participants = self::get_participants_state( $chat_id );
-        $pm_id        = (int) get_post_meta( $chat_id, 'pm_id', true );
-        $client_id    = (int) get_post_meta( $chat_id, 'client_id', true );
-
-        $messages = [];
-        foreach ( $rows as $row ) {
-            $id        = (int) $row['id'];
-            $sender_id = (int) $row['sender_id'];
-            $mine      = ( $sender_id === $user_id );
-            $role      = self::resolve_role( $chat_id, $sender_id, $participants );
-            if ( $role ) {
-                if ( function_exists( 'elxao_chat_ensure_participant' ) ) {
-                    elxao_chat_ensure_participant( $chat_id, $sender_id, $role );
-                }
-                if ( ! isset( $participants[ $sender_id ] ) ) {
-                    $participants[ $sender_id ] = [
-                        'role'           => $role,
-                        'last_delivered' => 0,
-                        'last_read'      => 0,
-                    ];
+        self::mark_delivered_for_user( $chat_id, $user_id, $rows );
+        $others_read_upto      = self::others_read_upto( $chat_id, $user_id );
+        $others_delivered_upto = self::others_delivered_upto( $chat_id, $user_id );
+        $out = [];
+        foreach( $rows as $r ){
+            $mine = ( $user_id == (int)$r['sender_id'] );
+            $id   = (int) $r['id'];
+            $read = $mine ? ( $id <= $others_read_upto ) : false;
+            $status = '';
+            $delivered = false;
+            if ( $mine ){
+                if ( $id <= $others_read_upto ){
+                    $status = 'read';
+                    $delivered = true;
+                } elseif ( $id <= $others_delivered_upto ){
+                    $status = 'delivered';
+                    $delivered = true;
+                } else {
+                    $status = 'sent';
                 }
             }
-
-            $status = self::status_payload( $id, $role, $participants, $pm_id, $client_id, $mine );
-            $message = [
+            $out[] = [
                 'id'           => $id,
-                'sender_id'    => $sender_id,
-                'sender'       => self::fmt( $sender_id ),
-                'message'      => wpautop( $row['message'] ),
-                'time'         => mysql2date( 'Y-m-d H:i', $row['created_at'], true ),
+                'sender_id'    => (int) $r['sender_id'],
+                'sender'       => self::fmt((int)$r['sender_id']),
+                'message'      => wpautop($r['message']),
+                'time'         => mysql2date('Y-m-d H:i', $r['created_at'], true ),
                 'mine'         => $mine,
                 'incoming'     => $mine ? 0 : 1,
-                'status'       => $mine ? $status['status'] : '',
-                'delivered'    => $mine ? $status['delivered'] : false,
-                'read'         => $mine ? $status['read'] : false,
+                'status'       => $status,
+                'delivered'    => $delivered,
+                'read'         => $read,
                 'delivered_at' => null,
                 'read_at'      => null,
             ];
-            if ( $role ) {
-                $message['sender_role'] = $role;
-            }
-            if ( ! empty( $status['recipient_breakdown'] ) ) {
-                $message['recipients'] = $status['recipient_breakdown'];
-            }
-            $messages[] = $message;
         }
-
-        $participants_payload = self::formatted_participants_state( $chat_id, $participants );
-
-        wp_send_json_success(
-            [
-                'messages'     => $messages,
-                'participants' => $participants_payload,
-            ]
-        );
+        wp_send_json_success( ['messages'=>$out] );
     }
 
-    private static function fmt( $uid ){
-        $u = get_userdata( $uid );
-        if ( ! $u ) {
-            return 'User ' . $uid;
-        }
-        $n = $u->display_name ? $u->display_name : $u->user_login;
-        if ( user_can( $uid, 'administrator' ) ) {
-            return $n . ' (Admin)';
-        }
-        return $n;
-    }
+    private static function fmt($uid){ $u = get_userdata($uid); if(!$u) return 'User '.$uid; $n = $u->display_name ? $u->display_name : $u->user_login; if ( user_can($uid,'administrator') ) return $n.' (Admin)'; return $n; }
 }
 }
