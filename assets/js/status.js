@@ -1,248 +1,155 @@
 /* ELXAO Chat - Message status UI (sent/delivered/read) */
 
-(function(){
-  function statusFromData(msg){
-    if (msg.read_at) return 'read';
-    if (msg.delivered_at) return 'delivered';
-    return msg.status || 'sent';
+(function () {
+  // Public API holder so chat.js can call us
+  window.ELXAO_STATUS_UI = window.ELXAO_STATUS_UI || {};
+
+  function statusFromData(node) {
+    // Priority: explicit read_at → read; delivered_at → delivered; fallback to data-status
+    var readAt = node.getAttribute('data-read-at');
+    var deliveredAt = node.getAttribute('data-delivered-at');
+    var st = node.getAttribute('data-status');
+    if (readAt && readAt !== '0' && readAt !== '') return 'read';
+    if (deliveredAt && deliveredAt !== '0' && deliveredAt !== '') return 'delivered';
+    return st || 'sent';
   }
 
-  function initStatuses(scope){
-    (scope || document).querySelectorAll('.elxao-message').forEach(function(node){
-      if(node.getAttribute('data-incoming') === '1'){
-        const stray = node.querySelector('.elxao-msg-status');
-        if(stray){ stray.remove(); }
-        return;
+  function applyTick(node) {
+    // Only for messages I sent (outgoing); incoming messages show no ticks
+    var incoming = node.getAttribute('data-incoming') === '1';
+    var meta = node.querySelector('.elxao-chat-meta');
+    if (!meta) return;
+
+    var badge = meta.querySelector('.elxao-msg-status');
+    if (incoming) {
+      if (badge) badge.remove();
+      return;
+    }
+
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'elxao-msg-status';
+      var i = document.createElement('i');
+      i.className = 'icon';
+      i.setAttribute('aria-hidden', 'true');
+      badge.appendChild(i);
+      meta.appendChild(badge);
+    }
+
+    // Reset classes
+    badge.classList.remove('sent', 'delivered', 'read');
+    var st = statusFromData(node);
+    badge.classList.add(st);
+  }
+
+  function initStatuses(scope) {
+    (scope || document).querySelectorAll('.elxao-message').forEach(function (node) {
+      applyTick(node);
+    });
+  }
+
+  // Collect IDs of visible incoming messages to mark as read
+  function getVisibleIncomingMessageIds() {
+    var ids = [];
+    var container = document.querySelector('.elxao-chat-messages');
+    if (!container) return ids;
+
+    var rectC = container.getBoundingClientRect();
+    var nodes = container.querySelectorAll('.elxao-message[data-incoming="1"]');
+
+    nodes.forEach(function (n) {
+      var id = n.getAttribute('data-id');
+      if (!id) return;
+
+      var r = n.getBoundingClientRect();
+      var verticallyVisible = r.top < rectC.bottom && r.bottom > rectC.top;
+      var horizontallyVisible = r.left < rectC.right && r.right > rectC.left;
+
+      if (verticallyVisible && horizontallyVisible) {
+        ids.push(parseInt(id, 10));
       }
-      const msg = {
-        status: node.getAttribute('data-status'),
-        delivered_at: node.getAttribute('data-delivered-at'),
-        read_at: node.getAttribute('data-read-at')
-      };
-      const s = statusFromData(msg);
-
-      let statusEl = node.querySelector('.elxao-msg-status');
-      if (!statusEl) {
-        statusEl = document.createElement('span');
-        statusEl.className = 'elxao-msg-status';
-        statusEl.innerHTML = '<i class="icon" aria-hidden="true"></i>';
-        // Essaie de l’insérer dans la zone meta si elle existe, sinon à la fin
-        const metaContainer = node.querySelector('.elxao-chat-meta') || node.querySelector('.meta') || node;
-        metaContainer.appendChild(statusEl);
-      }
-      statusEl.classList.remove('sent','delivered','read');
-      statusEl.classList.add(s);
-      statusEl.setAttribute('aria-label', s);
-      node.setAttribute('data-status', s);
     });
+    return ids;
   }
 
-  function isFiniteNumber(n){
-    if (Number.isFinite) {
-      return Number.isFinite(n);
-    }
-    return isFinite(n);
+  var markBusy = false;
+  function postRead(ids) {
+    if (!window.ELXAO_STATUS || !ELXAO_STATUS.restUrl) return;
+    var chatId = (window.ELXAO_CHAT && window.ELXAO_CHAT.chatId) ? parseInt(ELXAO_CHAT.chatId, 10) : 0;
+    if (!chatId || !ids.length) return;
+
+    markBusy = true;
+    fetch(ELXAO_STATUS.restUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-WP-Nonce': ELXAO_STATUS.nonce || ''
+      },
+      body: JSON.stringify({ ids: ids, chat_id: chatId })
+    })
+      .then(function (r) { return r.json().catch(function () { return {}; }); })
+      .then(function () {
+        // Optional: notify inbox UI to clear unread badges for this chat
+        var evt = new CustomEvent('elxaoChatRead', { detail: { chatId: chatId, ids: ids } });
+        document.dispatchEvent(evt);
+      })
+      .catch(function () { /* swallow */ })
+      .finally(function () { markBusy = false; });
   }
 
-  function toInt(value){
-    var n = parseInt(value, 10);
-    return isFiniteNumber(n) ? n : 0;
-  }
-
-  function normalizeState(entry){
-    if(!entry) return null;
-    return {
-      role: entry.role || '',
-      last_delivered: toInt(entry.last_delivered),
-      last_read: toInt(entry.last_read)
-    };
-  }
-
-  function statusFromTarget(messageId, target){
-    if(!target) return null;
-    if(target.last_read >= messageId) return 'read';
-    if(target.last_delivered >= messageId) return 'delivered';
-    return 'sent';
-  }
-
-  function computeStatusFromParticipants(node, participants){
-    if(!participants || !node) return null;
-    if(node.getAttribute('data-incoming') === '1') return null;
-    var messageId = parseInt(node.getAttribute('data-id'), 10);
-    if(!isFiniteNumber(messageId)) return null;
-    var role = node.getAttribute('data-sender-role');
-    if(!role) return null;
-
-    var client = normalizeState(participants.client);
-    var pm = normalizeState(participants.pm);
-    var adminStates = [];
-    if(Array.isArray(participants.admins)){
-      participants.admins.forEach(function(entry){
-        var norm = normalizeState(entry);
-        if(norm){ adminStates.push(norm); }
-      });
-    }
-
-    if(role === 'pm'){
-      return statusFromTarget(messageId, client);
-    }
-    if(role === 'client'){
-      return statusFromTarget(messageId, pm);
-    }
-    if(role === 'admin'){
-      var targets = [];
-      if(client) targets.push(client);
-      if(pm) targets.push(pm);
-      if(!targets.length) return null;
-      var allDelivered = targets.every(function(target){ return target.last_delivered >= messageId; });
-      var allRead = targets.every(function(target){ return target.last_read >= messageId; });
-      if(allRead) return 'read';
-      if(allDelivered) return 'delivered';
-      return 'sent';
-    }
-
-    // Fallback: try to locate matching participant by role name
-    if(participants[role] && !Array.isArray(participants[role])){
-      return statusFromTarget(messageId, normalizeState(participants[role]));
-    }
-
-    // Or by matching admins with same role hint
-    var matchingAdmin = null;
-    for(var i=0;i<adminStates.length;i++){
-      if(adminStates[i].role === role){ matchingAdmin = adminStates[i]; break; }
-    }
-    if(matchingAdmin){
-      return statusFromTarget(messageId, matchingAdmin);
-    }
-
-    return null;
-  }
-
-  function refreshFromParticipants(win, participants){
-    if(!win || !participants) return;
-    var scope = win.querySelector('.elxao-chat-messages') || win;
-    scope.querySelectorAll('.elxao-message').forEach(function(node){
-      var status = computeStatusFromParticipants(node, participants);
-      if(!status) return;
-      node.setAttribute('data-status', status);
-    });
-    initStatuses(scope);
-  }
-
-  function isAtBottom(box){
-    if(!box) return false;
-    var diff = box.scrollHeight - box.scrollTop - box.clientHeight;
-    return diff <= 12;
-  }
-
-  function highestVisibleIncomingId(box){
-    if(!box) return 0;
-    var containerRect = box.getBoundingClientRect();
-    var maxId = 0;
-    box.querySelectorAll('.elxao-message[data-id][data-incoming="1"]').forEach(function(node){
-      if(node.offsetParent === null) return;
-      var rect = node.getBoundingClientRect();
-      var overlapTop = Math.max(rect.top, containerRect.top);
-      var overlapBottom = Math.min(rect.bottom, containerRect.bottom);
-      var visibleHeight = overlapBottom - overlapTop;
-      var nodeHeight = rect.height || (rect.bottom - rect.top);
-      if(visibleHeight <= 0) return;
-      if(nodeHeight <= 0) return;
-      var ratio = visibleHeight / nodeHeight;
-      if(ratio < 0.25) return;
-      var id = parseInt(node.getAttribute('data-id'), 10);
-      if(isFiniteNumber(id) && id > maxId){ maxId = id; }
-    });
-    return maxId;
-  }
-
+  var readThrottle;
   function markVisibleAsRead() {
-    if (document.visibilityState === 'hidden') return;
-    if (typeof window.ELXAO_CHAT_MARK_READ !== 'function') return;
-
-    document.querySelectorAll('.elxao-chat-window').forEach(function(win){
-      if(win.offsetParent === null) return;
-      var chatId = parseInt(win.getAttribute('data-chat'), 10);
-      if(!chatId) return;
-      var box = win.querySelector('.elxao-chat-messages');
-      if(!box) return;
-      if(!isAtBottom(box)) return;
-      var maxId = highestVisibleIncomingId(box);
-      if(maxId){
-        window.ELXAO_CHAT_MARK_READ(chatId, maxId);
-      }
-    });
+    if (markBusy) return;
+    clearTimeout(readThrottle);
+    readThrottle = setTimeout(function () {
+      if (document.hidden) return;
+      var ids = getVisibleIncomingMessageIds();
+      if (ids.length) postRead(ids);
+    }, 150);
   }
 
-  var markReadRaf = null;
-  function requestMarkVisibleAsRead(){
-    if(markReadRaf !== null){ return; }
-    markReadRaf = window.requestAnimationFrame(function(){
-      markReadRaf = null;
-      markVisibleAsRead();
-    });
+  function refreshAllTicks(scope) {
+    (scope || document).querySelectorAll('.elxao-message').forEach(applyTick);
   }
 
-  function bindScrollHandlers(scope){
-    (scope || document).querySelectorAll('.elxao-chat-messages').forEach(function(box){
-      if(box.__elxaoScrollBound){ return; }
-      box.__elxaoScrollBound = true;
-      box.addEventListener('scroll', requestMarkVisibleAsRead, { passive: true });
-    });
-  }
-
-  // Initialise au chargement
-  document.addEventListener('DOMContentLoaded', function(){
-    initStatuses(document);
-    bindScrollHandlers(document);
+  // Expose the small public API used by chat.js
+  window.ELXAO_STATUS_UI.initStatuses = function (scope) {
+    initStatuses(scope);
     markVisibleAsRead();
-  });
-
-  // Expose si tu re-rendes dynamiquement
-  window.ELXAO_STATUS_UI = {
-    initStatuses: function(scope){
-      initStatuses(scope);
-      bindScrollHandlers(scope);
-    },
-    markVisibleAsRead: markVisibleAsRead,
-    refreshFromParticipants: refreshFromParticipants,
-    _bindScrollHandlers: bindScrollHandlers
   };
+  window.ELXAO_STATUS_UI.markVisibleAsRead = markVisibleAsRead;
+  window.ELXAO_STATUS_UI.refreshAllTicks = refreshAllTicks;
 
-  document.addEventListener('visibilitychange', function(){
-    if(document.visibilityState !== 'hidden'){ markVisibleAsRead(); }
-  });
-
-  window.addEventListener('resize', function(){
-    markVisibleAsRead();
-  });
-
-  window.addEventListener('focus', function(){
-    requestMarkVisibleAsRead();
-  });
-
-  if (window.MutationObserver) {
-    var mo = new MutationObserver(function(mutations){
-      var shouldMark = false;
-      mutations.forEach(function(mutation){
-        mutation.addedNodes && mutation.addedNodes.forEach(function(node){
-          if(node.nodeType !== 1){ return; }
-          if(node.matches && node.matches('.elxao-chat-window, .elxao-chat-messages')){
-            bindScrollHandlers(node);
-            shouldMark = true;
-            return;
-          }
-          if(node.querySelector){
-            var found = node.querySelector('.elxao-chat-messages');
-            if(found){
-              bindScrollHandlers(node);
-              shouldMark = true;
-            }
-          }
-        });
+  // Re-mark when the DOM changes (new messages appended, chat switches, etc.)
+  var mo = new MutationObserver(function (mutations) {
+    var needsInit = false;
+    mutations.forEach(function (m) {
+      m.addedNodes && m.addedNodes.forEach(function (node) {
+        if (node.nodeType !== 1) return;
+        if (node.matches && node.matches('.elxao-message, .elxao-chat-messages, .elxao-chat-window')) {
+          needsInit = true;
+        } else if (node.querySelector && node.querySelector('.elxao-chat-messages')) {
+          needsInit = true;
+        }
       });
-      if(shouldMark){ requestMarkVisibleAsRead(); }
     });
-    mo.observe(document.documentElement || document.body, { childList: true, subtree: true });
-  }
+    if (needsInit) {
+      initStatuses();
+      // Give layout a frame to settle, then mark as read
+      requestAnimationFrame(markVisibleAsRead);
+    }
+  });
+  mo.observe(document.documentElement || document.body, { subtree: true, childList: true });
+
+  // Also re-run when tab becomes visible again
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) {
+      refreshAllTicks();
+      markVisibleAsRead();
+    }
+  });
+
+  // First run
+  initStatuses();
+  markVisibleAsRead();
 })();
