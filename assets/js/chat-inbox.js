@@ -13,6 +13,46 @@
       timeout: 10000
     });
   }
+  function extractPreview(html){
+    var div = document.createElement('div');
+    div.innerHTML = html || '';
+    var text = (div.textContent || div.innerText || '').replace(/\s+/g,' ').trim();
+    return text;
+  }
+  function reorderThreads($inbox){
+    var $list = $inbox.find('.inbox-list');
+    if(!$list.length) return;
+    var items = $list.children('.thread').get();
+    items.sort(function(a,b){
+      var tb = parseInt(b.getAttribute('data-last')||'0',10);
+      var ta = parseInt(a.getAttribute('data-last')||'0',10);
+      if(tb === ta){
+        var idB = parseInt(b.getAttribute('data-chat')||'0',10);
+        var idA = parseInt(a.getAttribute('data-chat')||'0',10);
+        return idB - idA;
+      }
+      return tb - ta;
+    });
+    items.forEach(function(el){ $list.append(el); });
+  }
+  function updateThreadFromMessages($win, msgs){
+    if(!msgs || !msgs.length) return;
+    var latest = msgs[msgs.length-1];
+    var $inbox = $win.closest('.elxao-inbox');
+    if(!$inbox.length) return;
+    var chatId = parseInt($win.data('chat'),10);
+    if(!chatId) return;
+    var $thread = $inbox.find('.inbox-list .thread[data-chat="'+chatId+'"]');
+    if(!$thread.length) return;
+    if(latest.time){ $thread.find('.time').text(latest.time); }
+    var preview = extractPreview(latest.message || '');
+    if(!preview && latest.sender){ preview = latest.sender; }
+    $thread.find('.preview').text(preview || 'No messages yet.');
+    var stamp = typeof latest.timestamp !== 'undefined' ? parseInt(latest.timestamp,10) : 0;
+    if(!stamp || isNaN(stamp)){ stamp = Math.floor(Date.now()/1000); }
+    $thread.attr('data-last', stamp);
+    reorderThreads($inbox);
+  }
   function minimalRender(m){
     var cls='elxao-chat-message'; if(m.mine) cls+=' me';
     var meta = '<div class="elxao-chat-meta">'+(m.sender||'')+' • '+(m.time||'')+'</div>';
@@ -41,6 +81,7 @@
         appendMsgs($box,msgs);
         for(var i=0;i<msgs.length;i++){ var id=msgs[i].id||0; if(id>lastId) lastId=id; }
         $box.attr('data-last', lastId);
+        updateThreadFromMessages($win, msgs);
       }
       var ids=$box.find('.elxao-chat-message').map(function(){return parseInt($(this).attr('data-id'),10)||0;}).get();
       if(ids.length){
@@ -89,4 +130,7 @@
     schedulePolling($win);
   }
   $(document).on('click','.elxao-inbox .thread',function(){ loadThread($(this)); });
+  $(function(){
+    $('.elxao-inbox').each(function(){ reorderThreads($(this)); });
+  });
 })(jQuery);

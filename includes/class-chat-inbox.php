@@ -32,7 +32,13 @@ class ELXAO_Chat_Inbox {
         $row = $wpdb->get_row( $wpdb->prepare("SELECT id,sender_id,message,created_at FROM {$table} WHERE chat_id=%d ORDER BY id DESC LIMIT 1", $chat_id ), ARRAY_A );
         if ( ! $row ) return null;
         $u = get_userdata( (int)$row['sender_id'] ); $s = $u ? ( $u->display_name ? $u->display_name : $u->user_login ) : ('User '.$row['sender_id']);
-        return ['id'=>(int)$row['id'],'sender'=>$s,'message'=> wp_strip_all_tags($row['message']),'created'=> mysql2date('Y-m-d H:i',$row['created_at'],true) ];
+        return [
+            'id'        => (int) $row['id'],
+            'sender'    => $s,
+            'message'   => wp_strip_all_tags($row['message']),
+            'created'   => mysql2date('Y-m-d H:i', $row['created_at'], true),
+            'timestamp' => (int) mysql2date('U', $row['created_at'], false ),
+        ];
     }
     public static function shortcode_chat_inbox( $atts ){
         if ( ! is_user_logged_in() ) return '<div class="elxao-chat-error">Please log in to view your chats.</div>';
@@ -45,8 +51,9 @@ class ELXAO_Chat_Inbox {
           <div class="inbox-left">
             <div class="inbox-search"><input type="search" class="inbox-search-input" placeholder="Search chats…" /></div>
             <div class="inbox-list">
-            <?php foreach( $ids as $i => $cid ): $pid = (int)get_post_meta($cid,'project_id',true); $title = $pid? get_the_title($pid):('Project #'.$pid); $last = self::get_last_message($cid); $active = $i===0 ? ' active' : ''; $color=self::color_for_project($pid); ?>
-              <div class="thread<?php echo $active; ?>" data-chat="<?php echo esc_attr($cid); ?>" data-project="<?php echo esc_attr($pid); ?>">
+            <?php foreach( $ids as $i => $cid ): $pid = (int)get_post_meta($cid,'project_id',true); $title = $pid? get_the_title($pid):('Project #'.$pid); $last = self::get_last_message($cid); $active = $i===0 ? ' active' : ''; $color=self::color_for_project($pid); $last_ts = $last && ! empty($last['timestamp']) ? (int)$last['timestamp'] : 0; if(!$last_ts){ $post_date = get_post_field('post_date', $cid ); if($post_date){ $last_ts = (int) mysql2date('U', $post_date, false ); } }
+ ?>
+              <div class="thread<?php echo $active; ?>" data-chat="<?php echo esc_attr($cid); ?>" data-project="<?php echo esc_attr($pid); ?>" data-last="<?php echo esc_attr( $last_ts ); ?>">
                 <div class="avatar" style="background: <?php echo esc_attr($color); ?>;">
                   <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
                     <path fill="#fff" d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7zm2 0h12v3H6V7zm0 5h5v5H6v-5zm7 0h5v5h-5v-5z"/>
