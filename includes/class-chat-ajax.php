@@ -303,6 +303,51 @@ class ELXAO_Chat_Ajax {
         );
     }
 
+    public static function inbox_load_chat(){
+        check_ajax_referer( 'elxao_chat_nonce', 'nonce' );
+        if ( ! is_user_logged_in() ) {
+            wp_send_json_error( [ 'message' => 'Not logged in' ], 401 );
+        }
+
+        $chat_id    = isset( $_POST['chat_id'] ) ? intval( $_POST['chat_id'] ) : 0;
+        $project_id = isset( $_POST['project_id'] ) ? intval( $_POST['project_id'] ) : 0;
+
+        if ( ! $chat_id ) {
+            wp_send_json_error( [ 'message' => 'Invalid chat.' ], 400 );
+        }
+
+        if ( ! $project_id ) {
+            $project_id = (int) get_post_meta( $chat_id, 'project_id', true );
+        }
+
+        if ( ! $project_id ) {
+            wp_send_json_error( [ 'message' => 'Chat is not linked to a project.' ], 400 );
+        }
+
+        $user_id = get_current_user_id();
+        if ( ! elxao_chat_user_can_access( $project_id, $user_id ) ) {
+            wp_send_json_error( [ 'message' => 'You do not have access to this chat.' ], 403 );
+        }
+
+        if ( ! class_exists( 'ELXAO_Chat_Render' ) ) {
+            wp_send_json_error( [ 'message' => 'Chat renderer is unavailable.' ], 500 );
+        }
+
+        $html = ELXAO_Chat_Render::shortcode_chat_window( [ 'post_id' => $project_id ] );
+
+        if ( '' === trim( $html ) ) {
+            wp_send_json_error( [ 'message' => 'Unable to render chat window.' ], 500 );
+        }
+
+        wp_send_json_success(
+            [
+                'html'        => $html,
+                'chat_id'     => (int) $chat_id,
+                'project_id'  => (int) $project_id,
+            ]
+        );
+    }
+
     private static function fmt( $uid ){
         $u = get_userdata( $uid );
         if ( ! $u ) {

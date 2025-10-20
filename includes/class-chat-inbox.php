@@ -61,7 +61,7 @@ class ELXAO_Chat_Inbox {
         $atts = shortcode_atts(['per_page'=>200,'class'=>''], $atts, 'elxao_chat_inbox' );
         $user_id = get_current_user_id(); $per = max(1,intval($atts['per_page']));
         $ids = self::get_user_chats_sorted($user_id,$per);
-        wp_enqueue_style('elxao-chat'); wp_enqueue_script('elxao-chat'); wp_register_script('elxao-chat-inbox', ELXAO_CHAT_URL . 'assets/js/chat-inbox.js',['jquery'],ELXAO_CHAT_VERSION,true); wp_enqueue_script('elxao-chat-inbox'); $nonce = wp_create_nonce('elxao_chat_nonce'); wp_localize_script( 'elxao-chat', 'ELXAO_CHAT', ['ajaxurl'=>admin_url('admin-ajax.php'), 'nonce'=>$nonce, 'fetchFreq'=>1500 ] );
+        wp_enqueue_style('elxao-chat'); wp_enqueue_script('elxao-chat'); wp_register_script('elxao-chat-inbox', ELXAO_CHAT_URL . 'assets/js/chat-inbox.js',['jquery','elxao-chat'],ELXAO_CHAT_VERSION,true); wp_enqueue_script('elxao-chat-inbox'); $nonce = wp_create_nonce('elxao_chat_nonce'); wp_localize_script( 'elxao-chat', 'ELXAO_CHAT', ['ajaxurl'=>admin_url('admin-ajax.php'), 'nonce'=>$nonce, 'fetchFreq'=>1500 ] );
         ob_start(); ?>
         <div class="elxao-inbox <?php echo esc_attr($atts['class']); ?>">
           <div class="inbox-left">

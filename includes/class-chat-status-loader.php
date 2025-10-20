@@ -12,7 +12,7 @@ class ELXAO_Chat_Status_Loader {
         // Scripts
         wp_register_script( 'elxao-chat-status', ELXAO_CHAT_URL . 'assets/js/status.js', [], ELXAO_CHAT_VERSION, true );
         wp_enqueue_script( 'elxao-chat-status' );
-        wp_register_script( 'elxao-chat-inbox', ELXAO_CHAT_URL . 'assets/js/chat-inbox.js', ['jquery'], ELXAO_CHAT_VERSION, true );
+        wp_register_script( 'elxao-chat-inbox', ELXAO_CHAT_URL . 'assets/js/chat-inbox.js', ['jquery','elxao-chat'], ELXAO_CHAT_VERSION, true );
         wp_enqueue_script( 'elxao-chat-inbox' );
         // Vars for REST
         wp_localize_script( 'elxao-chat-status', 'ELXAO_STATUS', [
