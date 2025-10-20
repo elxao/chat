@@ -216,7 +216,7 @@ class ELXAO_Chat_Ajax {
         if ( $after_id > 0 ) {
             $rows = $wpdb->get_results(
                 $wpdb->prepare(
-                    "SELECT id, sender_id, message, created_at FROM {$table} WHERE chat_id=%d AND id>%d ORDER BY id ASC LIMIT 200",
+                    "SELECT id, sender_id, message, created_at FROM {$table} WHERE chat_id=%d AND id>%d ORDER BY id ASC LIMIT 20",
                     $chat_id,
                     $after_id
                 ),
