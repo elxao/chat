@@ -37,39 +37,43 @@
     });
   }
 
-  async function markVisibleAsRead() {
-    if (!window.ELXAO_STATUS || !ELXAO_STATUS.restUrl) return;
-    const candidates = Array.from(document.querySelectorAll('.elxao-message[data-id][data-incoming="1"]'));
-    const visibleIds = candidates
-      .filter(n => n.offsetParent !== null)
-      .map(n => parseInt(n.getAttribute('data-id'), 10))
-      .filter(Number.isFinite);
+  function isAtBottom(box){
+    if(!box) return false;
+    var diff = box.scrollHeight - box.scrollTop - box.clientHeight;
+    return diff <= 12;
+  }
 
-    if (!visibleIds.length) return;
+  function highestVisibleIncomingId(box){
+    if(!box) return 0;
+    var containerRect = box.getBoundingClientRect();
+    var maxId = 0;
+    box.querySelectorAll('.elxao-message[data-id][data-incoming="1"]').forEach(function(node){
+      if(node.offsetParent === null) return;
+      var rect = node.getBoundingClientRect();
+      if(rect.bottom <= containerRect.bottom + 1 && rect.top >= containerRect.top - 1){
+        var id = parseInt(node.getAttribute('data-id'), 10);
+        if(Number.isFinite(id) && id > maxId){ maxId = id; }
+      }
+    });
+    return maxId;
+  }
 
-    try{
-      await fetch(ELXAO_STATUS.restUrl, {
-        method:'POST',
-        headers:{
-          'Content-Type':'application/json',
-          'X-WP-Nonce': ELXAO_STATUS.nonce || ''
-        },
-        credentials:'same-origin',
-        body: JSON.stringify({ ids: visibleIds })
-      });
-      // Met à jour l’UI immédiatement
-      visibleIds.forEach(id => {
-        const wrapper = document.querySelector('.elxao-message[data-id="'+id+'"]');
-        if (wrapper){
-          wrapper.setAttribute('data-status','read');
-          wrapper.setAttribute('data-read-at', new Date().toISOString());
-        }
-        const n = wrapper ? wrapper.querySelector('.elxao-msg-status') : null;
-        if (n){ n.classList.remove('sent','delivered'); n.classList.add('read'); n.setAttribute('aria-label','read'); }
-      });
-    }catch(e){
-      // silencieux
-    }
+  function markVisibleAsRead() {
+    if (document.visibilityState === 'hidden') return;
+    if (typeof window.ELXAO_CHAT_MARK_READ !== 'function') return;
+
+    document.querySelectorAll('.elxao-chat-window').forEach(function(win){
+      if(win.offsetParent === null) return;
+      var chatId = parseInt(win.getAttribute('data-chat'), 10);
+      if(!chatId) return;
+      var box = win.querySelector('.elxao-chat-messages');
+      if(!box) return;
+      if(!isAtBottom(box)) return;
+      var maxId = highestVisibleIncomingId(box);
+      if(maxId){
+        window.ELXAO_CHAT_MARK_READ(chatId, maxId);
+      }
+    });
   }
 
   // Initialise au chargement
@@ -80,4 +84,8 @@
 
   // Expose si tu re-rendes dynamiquement
   window.ELXAO_STATUS_UI = { initStatuses, markVisibleAsRead };
+
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState !== 'hidden'){ markVisibleAsRead(); }
+  });
 })();

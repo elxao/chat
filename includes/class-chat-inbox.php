@@ -27,11 +27,25 @@ class ELXAO_Chat_Inbox {
         $p = ['#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#14b8a6','#64748b','#84cc16'];
         if(!$pid) return $p[0]; $i = absint($pid) % count($p); return $p[$i];
     }
-    private static function key_read( $chat_id ){ return '_elxao_chat_read_' . intval( $chat_id ); }
     private static function get_unread_count( $chat_id, $user_id ){
-        global $wpdb; $table = $wpdb->prefix . ELXAO_CHAT_TABLE;
-        $last_read = (int) get_user_meta( $user_id, self::key_read( $chat_id ), true );
-        $sql = "SELECT COUNT(*) FROM {$table} WHERE chat_id=%d AND id>%d AND sender_id!=%d";
+        global $wpdb;
+        $messages_table      = $wpdb->prefix . ELXAO_CHAT_TABLE;
+        $participants_table  = $wpdb->prefix . ELXAO_CHAT_PARTICIPANTS_TABLE;
+
+        if ( function_exists( 'elxao_chat_ensure_participant' ) ) {
+            elxao_chat_ensure_participant( $chat_id, $user_id );
+        }
+
+        $last_read = $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT last_read_message_id FROM {$participants_table} WHERE chat_id=%d AND user_id=%d",
+                $chat_id,
+                $user_id
+            )
+        );
+        $last_read = $last_read ? (int) $last_read : 0;
+
+        $sql = "SELECT COUNT(*) FROM {$messages_table} WHERE chat_id=%d AND id>%d AND sender_id!=%d";
         $count = $wpdb->get_var( $wpdb->prepare( $sql, $chat_id, $last_read, $user_id ) );
         return $count ? (int) $count : 0;
     }
