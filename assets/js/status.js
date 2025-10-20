@@ -111,6 +111,9 @@
     if (!id) return null;
 
     var role = node.getAttribute('data-sender-role') || '';
+    if (role !== 'pm' && role !== 'client' && role !== 'admin') {
+      role = 'admin';
+    }
     var status = 'sent';
     var delivered = false;
     var read = false;
