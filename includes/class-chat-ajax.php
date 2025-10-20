@@ -414,6 +414,19 @@ class ELXAO_Chat_Ajax {
             return $n . ' (Admin)';
         }
         return $n;
+    
+    public static function get_participants_state_ajax(){
+        $chat_id = isset($_POST['chat_id']) ? intval($_POST['chat_id']) : 0;
+        if ( ! $chat_id ) {
+            wp_send_json_error([ 'message' => 'Missing chat_id' ]);
+        }
+        $user_id = get_current_user_id();
+        if ( ! elxao_chat_user_can_access( $chat_id, $user_id ) ) {
+            wp_send_json_error([ 'message' => 'Forbidden' ], 403);
+        }
+        $state = self::get_participants_state( $chat_id );
+        wp_send_json_success([ 'state' => $state ]);
     }
+
 }
 }

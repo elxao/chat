@@ -1,4 +1,8 @@
 (function($){
+  function fetchStateForChat(chatId, cb){
+    safeJSONPost({ action:'elxao_get_participants_state', chat_id: chatId }, function(resp){ cb && cb(resp.data && resp.data.state); }, function(){ cb && cb(null); });
+  }
+
   var readAckState = { pending: {}, confirmed: {} };
   window.ELXAO_CHAT_PARTICIPANTS = window.ELXAO_CHAT_PARTICIPANTS || {};
 
@@ -306,3 +310,52 @@
     bootstrapChatWindows(document);
   });
 })(jQuery);
+
+
+  // Periodically refresh status ticks from server (helps when viewing from other accounts/devices)
+  setInterval(function(){
+    $('.elxao-chat-window').each(function(){
+      var $w = $(this);
+      var chatId = parseInt($w.data('chat'));
+      if(!chatId) return;
+      fetchStateForChat(chatId, function(state){
+        if(!state) return;
+        // For each outgoing message, compute tick based on counterpart 'last_*'
+        var me = parseInt($w.data('me'));
+        var myRole = ($w.data('role')||'').toString();
+        var pm = state.pm ? state.pm : null;
+        var client = state.client ? state.client : null;
+        $w.find('.elxao-chat-message[data-sender]').each(function(){
+          var $m = $(this);
+          var mid = parseInt($m.data('id'));
+          var sender = parseInt($m.data('sender'));
+          var outgoing = (sender === me);
+          var $badge = $m.find('.elxao-msg-status');
+          if(!$badge.length) return;
+          if(!outgoing && myRole!=='admin'){ return; } // incoming: no ticks for non-admin
+          function setTick(cls){
+            $badge.removeClass('sent delivered read partial').addClass(cls);
+          }
+          if(myRole==='admin'){
+            var cRead = client && client.last_read_message_id >= mid;
+            var pRead = pm && pm.last_read_message_id >= mid;
+            if(cRead && pRead){ setTick('read'); }
+            else{
+              var cDel = client && client.last_delivered_message_id >= mid;
+              var pDel = pm && pm.last_delivered_message_id >= mid;
+              if(cDel || pDel){ setTick('delivered'); }
+              else{ setTick('sent'); }
+            }
+          }else{
+            // If I sent it, check the other party
+            var other = (myRole==='pm') ? client : pm;
+            if(other){
+              if(other.last_read_message_id >= mid){ setTick('read'); }
+              else if(other.last_delivered_message_id >= mid){ setTick('delivered'); }
+              else { setTick('sent'); }
+            }
+          }
+        });
+      });
+    });
+  }, 4000);

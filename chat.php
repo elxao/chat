@@ -2,13 +2,13 @@
 /*
 Plugin Name: Chat
 Description: Private per-project chat (client, PM, admin) with read receipts and WhatsApp-style inbox sorting.
-Version: 1.4.3
+Version: 1.4.4
 Author: ELXAO
 */
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-if ( ! defined('ELXAO_CHAT_VERSION') ) define( 'ELXAO_CHAT_VERSION', '1.4.2' );
+if ( ! defined('ELXAO_CHAT_VERSION') ) define( 'ELXAO_CHAT_VERSION', '1.4.4' );
 if ( ! defined('ELXAO_CHAT_DIR') ) define( 'ELXAO_CHAT_DIR', plugin_dir_path( __FILE__ ) );
 if ( ! defined('ELXAO_CHAT_URL') ) define( 'ELXAO_CHAT_URL', plugin_dir_url( __FILE__ ) );
 if ( ! defined('ELXAO_CHAT_TABLE') ) define( 'ELXAO_CHAT_TABLE', 'elxao_chat_messages' );
@@ -111,6 +111,9 @@ add_action( 'wp_ajax_elxao_fetch_messages', function(){
 });
 add_action( 'wp_ajax_elxao_mark_read', function(){
     if ( class_exists('ELXAO_Chat_Ajax') ) ELXAO_Chat_Ajax::mark_read();
+});
+add_action( 'wp_ajax_elxao_get_participants_state', function(){
+    if ( class_exists('ELXAO_Chat_Ajax') ) ELXAO_Chat_Ajax::get_participants_state_ajax();
 });
 add_action( 'wp_ajax_elxao_inbox_load_chat', function(){
     if ( class_exists('ELXAO_Chat_Ajax') ) ELXAO_Chat_Ajax::inbox_load_chat();
