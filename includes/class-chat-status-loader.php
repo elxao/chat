@@ -21,7 +21,7 @@ class ELXAO_Chat_Status_Loader {
         ]);
         // Icon + color tokens
         $tick = ELXAO_CHAT_URL . 'assets/icons/tick.svg';
-        $double = ELXAO_CHAT_URL . 'assets/icons/tick-double.svg';
+        $double = ELXAO_CHAT_URL . 'assets/icons/double-tick.svg';
         $css = ':root{--elxao-tick-url:url("'.esc_url( $tick ).'");--elxao-tick-double-url:url("'.esc_url( $double ).'");--elxao-status-grey:#8391a1;--elxao-status-blue:#34B7F1;}';
         wp_add_inline_style( 'elxao-chat-status', $css );
     }
