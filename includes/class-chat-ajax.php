@@ -44,17 +44,6 @@ class ELXAO_Chat_Ajax {
             'recipient_breakdown' => [],
         ];
 
-        if ( 'admin' === $sender_role ) {
-            $result['recipient_breakdown']['client'] = [
-                'delivered' => $client_state ? ( $client_state['last_delivered'] >= $message_id ) : false,
-                'read'      => $client_state ? ( $client_state['last_read'] >= $message_id ) : false,
-            ];
-            $result['recipient_breakdown']['pm'] = [
-                'delivered' => $pm_state ? ( $pm_state['last_delivered'] >= $message_id ) : false,
-                'read'      => $pm_state ? ( $pm_state['last_read'] >= $message_id ) : false,
-            ];
-        }
-
         if ( ! $is_mine ) {
             return $result;
         }
@@ -64,6 +53,14 @@ class ELXAO_Chat_Ajax {
         } elseif ( 'client' === $sender_role ) {
             $dest = $pm_state;
         } elseif ( 'admin' === $sender_role ) {
+            $result['recipient_breakdown']['client'] = [
+                'delivered' => $client_state ? ( $client_state['last_delivered'] >= $message_id ) : false,
+                'read'      => $client_state ? ( $client_state['last_read'] >= $message_id ) : false,
+            ];
+            $result['recipient_breakdown']['pm'] = [
+                'delivered' => $pm_state ? ( $pm_state['last_delivered'] >= $message_id ) : false,
+                'read'      => $pm_state ? ( $pm_state['last_read'] >= $message_id ) : false,
+            ];
             $targets       = [];
             $has_target    = false;
             $all_delivered = true;
