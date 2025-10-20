@@ -1,27 +1,4 @@
 (function($){
-  function plainText(html){
-    if(!html) return '';
-    return $('<div>').html(html).text().replace(/\s+/g,' ').trim();
-  }
-  function shorten(text){
-    if(text.length <= 140) return text;
-    return text.slice(0,137) + '…';
-  }
-  function moveThreadToTop(chatId, message){
-    var $inbox = $('.elxao-inbox');
-    if(!$inbox.length) return;
-    var $thread = $inbox.find('.thread[data-chat="'+chatId+'"]').first();
-    if(!$thread.length) return;
-    var text = shorten(plainText(message && message.message ? message.message : ''));
-    if(text){
-      $thread.find('.preview').text(text);
-    }
-    if(message && message.time){
-      $thread.find('.time').text(message.time);
-    }
-    var $list = $thread.parent();
-    $thread.detach().prependTo($list);
-  }
   function ajaxURL(){
     if (window.ELXAO_CHAT && ELXAO_CHAT.ajaxurl) return ELXAO_CHAT.ajaxurl;
     if (window.ajaxurl) return window.ajaxurl;
@@ -75,16 +52,6 @@
       $box.find('.elxao-chat-loading').remove();
     });
   }
-  $(document).on('elxao:messages-appended','.elxao-chat-messages',function(ev,data){
-    if(!data || !data.messages || !data.messages.length) return;
-    var chatId = data.chatId;
-    if(typeof chatId!=='number' || isNaN(chatId)){
-      chatId = parseInt($(this).closest('.elxao-chat-window').data('chat'),10);
-    }
-    if(!chatId) return;
-    var message = data.messages[data.messages.length-1];
-    moveThreadToTop(chatId, message);
-  });
   function schedulePolling($win){
     var base = (window.ELXAO_CHAT && ELXAO_CHAT.fetchFreq) ? ELXAO_CHAT.fetchFreq : 1500;
     function tick(){ fetchOnce($win); }
