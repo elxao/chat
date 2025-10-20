@@ -9,6 +9,11 @@
 
   function initStatuses(scope){
     (scope || document).querySelectorAll('.elxao-message').forEach(function(node){
+      if(node.getAttribute('data-incoming') === '1'){
+        const stray = node.querySelector('.elxao-msg-status');
+        if(stray){ stray.remove(); }
+        return;
+      }
       const msg = {
         status: node.getAttribute('data-status'),
         delivered_at: node.getAttribute('data-delivered-at'),
@@ -22,11 +27,13 @@
         statusEl.className = 'elxao-msg-status';
         statusEl.innerHTML = '<i class="icon" aria-hidden="true"></i>';
         // Essaie de l’insérer dans la zone meta si elle existe, sinon à la fin
-        (node.querySelector('.meta') || node).appendChild(statusEl);
+        const metaContainer = node.querySelector('.elxao-chat-meta') || node.querySelector('.meta') || node;
+        metaContainer.appendChild(statusEl);
       }
       statusEl.classList.remove('sent','delivered','read');
       statusEl.classList.add(s);
       statusEl.setAttribute('aria-label', s);
+      node.setAttribute('data-status', s);
     });
   }
 
@@ -52,8 +59,13 @@
       });
       // Met à jour l’UI immédiatement
       visibleIds.forEach(id => {
-        const n = document.querySelector('.elxao-message[data-id="'+id+'"] .elxao-msg-status');
-        if (n){ n.classList.remove('sent','delivered'); n.classList.add('read'); }
+        const wrapper = document.querySelector('.elxao-message[data-id="'+id+'"]');
+        if (wrapper){
+          wrapper.setAttribute('data-status','read');
+          wrapper.setAttribute('data-read-at', new Date().toISOString());
+        }
+        const n = wrapper ? wrapper.querySelector('.elxao-msg-status') : null;
+        if (n){ n.classList.remove('sent','delivered'); n.classList.add('read'); n.setAttribute('aria-label','read'); }
       });
     }catch(e){
       // silencieux

@@ -3,6 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
 if ( ! class_exists('ELXAO_Chat_Ajax') ) {
 class ELXAO_Chat_Ajax {
     private static function key_read( $chat_id, $user_id ){ return '_elxao_chat_read_' . intval($chat_id); }
+    private static function key_delivered( $chat_id, $user_id ){ return '_elxao_chat_delivered_' . intval($chat_id); }
 
     public static function send_message(){
         check_ajax_referer( 'elxao_chat_nonce', 'nonce' );
@@ -48,6 +49,34 @@ class ELXAO_Chat_Ajax {
         return $min === PHP_INT_MAX ? 0 : $min;
     }
 
+    private static function others_delivered_upto( $chat_id, $sender_id ){
+        $pm_id = (int) get_post_meta( $chat_id, 'pm_id', true );
+        $client_id = (int) get_post_meta( $chat_id, 'client_id', true );
+        $participants = array_filter([$pm_id,$client_id]);
+        $others = array_filter($participants, function($uid) use($sender_id){ return $uid && $uid != $sender_id; });
+        if ( empty($others) ) return 0;
+        $min = PHP_INT_MAX;
+        foreach( $others as $uid ){
+            $v = (int) get_user_meta( $uid, self::key_delivered($chat_id,$uid), true );
+            if ( $v < $min ) $min = $v;
+        }
+        return $min === PHP_INT_MAX ? 0 : $min;
+    }
+
+    private static function mark_delivered_for_user( $chat_id, $user_id, $rows ){
+        if ( empty( $rows ) ) return;
+        $max = 0;
+        foreach( $rows as $r ){
+            if ( (int) $r['sender_id'] === $user_id ) continue;
+            $id = (int) $r['id'];
+            if ( $id > $max ) $max = $id;
+        }
+        if ( ! $max ) return;
+        $key     = self::key_delivered( $chat_id, $user_id );
+        $current = (int) get_user_meta( $user_id, $key, true );
+        if ( $max > $current ) update_user_meta( $user_id, $key, $max );
+    }
+
     public static function fetch_messages(){
         check_ajax_referer( 'elxao_chat_nonce', 'nonce' );
         if ( ! is_user_logged_in() ) wp_send_json_error( ['message' => 'Not logged in'], 401 );
@@ -62,12 +91,41 @@ class ELXAO_Chat_Ajax {
         } else {
             $rows = $wpdb->get_results( $wpdb->prepare("SELECT id, sender_id, message, created_at FROM {$table} WHERE chat_id=%d ORDER BY id ASC LIMIT 200", $chat_id ), ARRAY_A );
         }
-        $others_upto = self::others_read_upto( $chat_id, $user_id );
+        self::mark_delivered_for_user( $chat_id, $user_id, $rows );
+        $others_read_upto      = self::others_read_upto( $chat_id, $user_id );
+        $others_delivered_upto = self::others_delivered_upto( $chat_id, $user_id );
         $out = [];
         foreach( $rows as $r ){
             $mine = ( $user_id == (int)$r['sender_id'] );
-            $read = $mine ? ( (int)$r['id'] <= $others_upto ) : false;
-            $out[] = ['id'=>(int)$r['id'],'sender_id'=>(int)$r['sender_id'],'sender'=> self::fmt((int)$r['sender_id']),'message'=> wpautop($r['message']),'time'=> mysql2date('Y-m-d H:i',$r['created_at'],true),'mine'=> $mine,'read'=>$read ];
+            $id   = (int) $r['id'];
+            $read = $mine ? ( $id <= $others_read_upto ) : false;
+            $status = '';
+            $delivered = false;
+            if ( $mine ){
+                if ( $id <= $others_read_upto ){
+                    $status = 'read';
+                    $delivered = true;
+                } elseif ( $id <= $others_delivered_upto ){
+                    $status = 'delivered';
+                    $delivered = true;
+                } else {
+                    $status = 'sent';
+                }
+            }
+            $out[] = [
+                'id'           => $id,
+                'sender_id'    => (int) $r['sender_id'],
+                'sender'       => self::fmt((int)$r['sender_id']),
+                'message'      => wpautop($r['message']),
+                'time'         => mysql2date('Y-m-d H:i', $r['created_at'], true ),
+                'mine'         => $mine,
+                'incoming'     => $mine ? 0 : 1,
+                'status'       => $status,
+                'delivered'    => $delivered,
+                'read'         => $read,
+                'delivered_at' => null,
+                'read_at'      => null,
+            ];
         }
         wp_send_json_success( ['messages'=>$out] );
     }

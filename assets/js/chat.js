@@ -15,9 +15,50 @@
   }
 
   function renderMessage(m){
-    var cls='elxao-chat-message'; if(m.mine) cls+=' me';
-    var meta = '<div class="elxao-chat-meta">'+(m.sender||'')+' • '+(m.time||'')+'</div>';
-    return '<div class="'+cls+'" data-id="'+m.id+'"><div class="bubble"><div class="text">'+m.message+'</div>'+meta+'</div></div>';
+    var classes = 'elxao-chat-message elxao-message';
+    if(m.mine) classes += ' me';
+
+    var attrs = ' data-id="'+m.id+'"';
+    if(typeof m.incoming !== 'undefined'){
+      attrs += ' data-incoming="'+(m.incoming ? '1' : '0')+'"';
+    }
+    if(m.status){ attrs += ' data-status="'+m.status+'"'; }
+    if(m.delivered_at){ attrs += ' data-delivered-at="'+m.delivered_at+'"'; }
+    if(m.read_at){ attrs += ' data-read-at="'+m.read_at+'"'; }
+
+    var metaParts = [];
+    if(m.sender){ metaParts.push(m.sender); }
+    if(m.time){ metaParts.push(m.time); }
+    var metaText = metaParts.join(' • ');
+    var meta = '<div class="elxao-chat-meta">';
+    if(metaText){ meta += '<span class="meta-text">'+metaText+'</span>'; }
+    if(m.mine){
+      meta += '<span class="elxao-msg-status"><i class="icon" aria-hidden="true"></i></span>';
+    }
+    meta += '</div>';
+
+    return '<div class="'+classes+'"'+attrs+'><div class="bubble"><div class="text">'+m.message+'</div>'+meta+'</div></div>';
+  }
+
+  function applyStatusData($node, m){
+    if(typeof m.incoming !== 'undefined'){
+      $node.attr('data-incoming', m.incoming ? '1' : '0');
+    }
+    if(m.status){
+      $node.attr('data-status', m.status);
+    } else {
+      $node.removeAttr('data-status');
+    }
+    if(m.delivered_at){
+      $node.attr('data-delivered-at', m.delivered_at);
+    } else {
+      $node.removeAttr('data-delivered-at');
+    }
+    if(m.read_at){
+      $node.attr('data-read-at', m.read_at);
+    } else {
+      $node.removeAttr('data-read-at');
+    }
   }
 
   window.appendUnique = function($box,msgs){
@@ -25,7 +66,16 @@
     var maxId = parseInt($box.attr('data-last')||'0',10);
     for (var i=0;i<msgs.length;i++){
       var m = msgs[i];
-      if ($box.find('.elxao-chat-message[data-id="'+m.id+'"]').length){
+      var $existing = $box.find('.elxao-chat-message[data-id="'+m.id+'"]');
+      if ($existing.length){
+        applyStatusData($existing, m);
+        if(m.mine){
+          if(!$existing.find('.elxao-msg-status').length){
+            $existing.find('.elxao-chat-meta').append('<span class="elxao-msg-status"><i class="icon" aria-hidden="true"></i></span>');
+          }
+        } else {
+          $existing.find('.elxao-msg-status').remove();
+        }
         if(m.id>maxId) maxId=m.id;
         continue;
       }
@@ -37,6 +87,9 @@
       window.requestAnimationFrame(function(){ $box.scrollTop($box[0].scrollHeight); });
     }
     $box.attr('data-last', maxId);
+    if(window.ELXAO_STATUS_UI && typeof window.ELXAO_STATUS_UI.initStatuses === 'function'){
+      window.ELXAO_STATUS_UI.initStatuses($box[0]);
+    }
   };
 
   function fetchMessages($win){
@@ -50,6 +103,12 @@
       $box.find('.elxao-chat-loading').remove();
       var msgs = (resp && resp.data && resp.data.messages) ? resp.data.messages : [];
       if(msgs.length){ window.appendUnique($box,msgs); }
+      if(window.ELXAO_STATUS_UI){
+        if(typeof window.ELXAO_STATUS_UI.initStatuses === 'function'){ window.ELXAO_STATUS_UI.initStatuses($box[0]); }
+        if(typeof window.ELXAO_STATUS_UI.markVisibleAsRead === 'function'){
+          window.requestAnimationFrame(function(){ window.ELXAO_STATUS_UI.markVisibleAsRead(); });
+        }
+      }
       var ids = $box.find('.elxao-chat-message').map(function(){ return parseInt($(this).attr('data-id'),10)||0; }).get();
       if(ids.length){
         var max=ids[0]; for(var i=1;i<ids.length;i++){ if(ids[i]>max) max=ids[i]; }
