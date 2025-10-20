@@ -5,6 +5,22 @@ class ELXAO_Chat_Ajax {
     private static function key_read( $chat_id, $user_id ){ return '_elxao_chat_read_' . intval($chat_id); }
     private static function key_delivered( $chat_id, $user_id ){ return '_elxao_chat_delivered_' . intval($chat_id); }
 
+    private static function update_read_marker( $chat_id, $user_id, $last_id ){
+        $last_id = intval( $last_id );
+        if ( $last_id <= 0 ) {
+            return;
+        }
+        $key     = self::key_read( $chat_id, $user_id );
+        $current = (int) get_user_meta( $user_id, $key, true );
+        if ( $last_id > $current ) {
+            update_user_meta( $user_id, $key, $last_id );
+        }
+    }
+
+    public static function mark_read_upto( $chat_id, $user_id, $last_id ){
+        self::update_read_marker( $chat_id, $user_id, $last_id );
+    }
+
     public static function send_message(){
         check_ajax_referer( 'elxao_chat_nonce', 'nonce' );
         if ( ! is_user_logged_in() ) wp_send_json_error( ['message' => 'Not logged in'], 401 );
@@ -29,9 +45,7 @@ class ELXAO_Chat_Ajax {
         $project_id = (int) get_post_meta( $chat_id, 'project_id', true );
         if ( ! $project_id ) wp_send_json_error( ['message' => 'Invalid chat'], 400 );
         $user_id = get_current_user_id(); if ( ! elxao_chat_user_can_access( $project_id, $user_id ) ) wp_send_json_error( ['message' => 'Forbidden'], 403 );
-        $key = self::key_read( $chat_id, $user_id );
-        $current = (int) get_user_meta( $user_id, $key, true );
-        if ( $last_id > $current ) update_user_meta( $user_id, $key, $last_id );
+        self::update_read_marker( $chat_id, $user_id, $last_id );
         wp_send_json_success( ['ok'=>true] );
     }
 
