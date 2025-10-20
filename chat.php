@@ -12,25 +12,25 @@ if ( ! defined('ELXAO_CHAT_VERSION') ) define( 'ELXAO_CHAT_VERSION', '1.4.0' );
 if ( ! defined('ELXAO_CHAT_DIR') ) define( 'ELXAO_CHAT_DIR', plugin_dir_path( __FILE__ ) );
 if ( ! defined('ELXAO_CHAT_URL') ) define( 'ELXAO_CHAT_URL', plugin_dir_url( __FILE__ ) );
 if ( ! defined('ELXAO_CHAT_TABLE') ) define( 'ELXAO_CHAT_TABLE', 'elxao_chat_messages' );
-if ( ! defined('ELXAO_CHAT_CURSOR_TABLE') ) define( 'ELXAO_CHAT_CURSOR_TABLE', 'elxao_chat_cursors' );
+if ( ! defined('ELXAO_CHAT_PARTICIPANTS_TABLE') ) define( 'ELXAO_CHAT_PARTICIPANTS_TABLE', 'elxao_chat_participants' );
+if ( ! defined('ELXAO_CHAT_RECEIPTS_TABLE') ) define( 'ELXAO_CHAT_RECEIPTS_TABLE', 'elxao_chat_receipts' );
 
 require_once ELXAO_CHAT_DIR . 'includes/class-chat-posttype.php';
 require_once ELXAO_CHAT_DIR . 'includes/class-chat-render.php';
 require_once ELXAO_CHAT_DIR . 'includes/class-chat-ajax.php';
 require_once ELXAO_CHAT_DIR . 'includes/class-chat-list.php';
 require_once ELXAO_CHAT_DIR . 'includes/class-chat-inbox.php';
-require_once ELXAO_CHAT_DIR . 'includes/class-chat-realtime.php';
-require_once ELXAO_CHAT_DIR . 'includes/rest-status.php';
 
-if ( ! function_exists( 'elxao_chat_install_schema' ) ) {
-function elxao_chat_install_schema() {
+/* ===== Activation ===== */
+if ( ! function_exists('elxao_chat_activate') ) {
+function elxao_chat_activate() {
     global $wpdb;
+    $charset_collate    = $wpdb->get_charset_collate();
+    $messages_table     = $wpdb->prefix . ELXAO_CHAT_TABLE;
+    $participants_table = $wpdb->prefix . ELXAO_CHAT_PARTICIPANTS_TABLE;
+    $receipts_table     = $wpdb->prefix . ELXAO_CHAT_RECEIPTS_TABLE;
 
-    $messages_table = $wpdb->prefix . ELXAO_CHAT_TABLE;
-    $cursor_table   = $wpdb->prefix . ELXAO_CHAT_CURSOR_TABLE;
-    $charset_collate = $wpdb->get_charset_collate();
-
-    $sql_messages = "CREATE TABLE {$messages_table} (
+    $sql_messages = "CREATE TABLE IF NOT EXISTS {$messages_table} (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
         chat_id BIGINT UNSIGNED NOT NULL,
         sender_id BIGINT UNSIGNED NOT NULL,
@@ -38,49 +38,44 @@ function elxao_chat_install_schema() {
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY  (id),
         KEY chat_id_idx (chat_id),
-        KEY sender_id_idx (sender_id),
-        KEY idx_chat_created (chat_id, created_at),
-        KEY idx_sender_created (sender_id, created_at)
+        KEY sender_id_idx (sender_id)
     ) {$charset_collate};";
 
-    $sql_cursors = "CREATE TABLE {$cursor_table} (
+    $sql_participants = "CREATE TABLE IF NOT EXISTS {$participants_table} (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
         chat_id BIGINT UNSIGNED NOT NULL,
         user_id BIGINT UNSIGNED NOT NULL,
-        cursor_type VARCHAR(20) NOT NULL,
+        role ENUM('client','pm','admin') NOT NULL,
+        last_delivered_message_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+        last_read_message_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+        last_active_at DATETIME NULL DEFAULT NULL,
+        PRIMARY KEY  (id),
+        UNIQUE KEY chat_user (chat_id, user_id),
+        KEY chat_idx (chat_id),
+        KEY user_idx (user_id),
+        KEY role_idx (role)
+    ) {$charset_collate};";
+
+    $sql_receipts = "CREATE TABLE IF NOT EXISTS {$receipts_table} (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
         message_id BIGINT UNSIGNED NOT NULL,
-        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (chat_id, user_id, cursor_type),
-        KEY idx_cursor_message (message_id),
-        KEY idx_cursor_user_type (user_id, cursor_type)
+        user_id BIGINT UNSIGNED NOT NULL,
+        status ENUM('sent','delivered','read') NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        UNIQUE KEY message_user_status (message_id, user_id, status),
+        KEY message_idx (message_id),
+        KEY user_idx (user_id)
     ) {$charset_collate};";
 
     require_once ABSPATH . 'wp-admin/includes/upgrade.php';
     dbDelta( $sql_messages );
-    dbDelta( $sql_cursors );
-}
-}
-
-if ( ! function_exists( 'elxao_chat_maybe_upgrade' ) ) {
-function elxao_chat_maybe_upgrade() {
-    $installed = get_option( 'elxao_chat_db_version' );
-    if ( version_compare( (string) $installed, ELXAO_CHAT_VERSION, '<' ) ) {
-        elxao_chat_install_schema();
-        update_option( 'elxao_chat_db_version', ELXAO_CHAT_VERSION );
-    }
-}
-}
-
-/* ===== Activation ===== */
-if ( ! function_exists('elxao_chat_activate') ) {
-function elxao_chat_activate() {
-    elxao_chat_install_schema();
+    dbDelta( $sql_participants );
+    dbDelta( $sql_receipts );
     if ( class_exists('ELXAO_Chat_PostType') ) { ELXAO_Chat_PostType::register_cpt(); }
-    update_option( 'elxao_chat_db_version', ELXAO_CHAT_VERSION );
     flush_rewrite_rules();
 }}
 register_activation_hook( __FILE__, 'elxao_chat_activate' );
-
-add_action( 'plugins_loaded', 'elxao_chat_maybe_upgrade' );
 
 /* ===== Init / assets ===== */
 add_action( 'init', function(){
@@ -147,8 +142,174 @@ function elxao_chat_get_or_create_chat_for_project( $project_id ){
         update_post_meta( $chat_id, 'pm_id', $pm_id );
         update_post_meta( $chat_id, 'client_id', $client_id );
         update_post_meta( $project_id, '_elxao_chat_id', $chat_id );
+        elxao_chat_sync_participants( $chat_id );
     }
     return $chat_id;
+}}
+
+if ( ! function_exists( 'elxao_chat_get_user_role_in_chat' ) ) {
+function elxao_chat_get_user_role_in_chat( $chat_id, $user_id ) {
+    if ( ! $chat_id || ! $user_id ) {
+        return null;
+    }
+    $pm_id     = (int) get_post_meta( $chat_id, 'pm_id', true );
+    $client_id = (int) get_post_meta( $chat_id, 'client_id', true );
+    if ( $user_id === $pm_id ) {
+        return 'pm';
+    }
+    if ( $user_id === $client_id ) {
+        return 'client';
+    }
+    if ( user_can( $user_id, 'administrator' ) ) {
+        return 'admin';
+    }
+    return null;
+}}
+
+if ( ! function_exists( 'elxao_chat_ensure_participant' ) ) {
+function elxao_chat_ensure_participant( $chat_id, $user_id, $role = null ) {
+    if ( ! $chat_id || ! $user_id ) {
+        return null;
+    }
+    if ( null === $role ) {
+        $role = elxao_chat_get_user_role_in_chat( $chat_id, $user_id );
+    }
+    if ( ! $role ) {
+        return null;
+    }
+
+    global $wpdb;
+    $table = $wpdb->prefix . ELXAO_CHAT_PARTICIPANTS_TABLE;
+    $wpdb->query(
+        $wpdb->prepare(
+            "INSERT INTO {$table} (chat_id, user_id, role, last_active_at)
+             VALUES (%d, %d, %s, NOW())
+             ON DUPLICATE KEY UPDATE role = VALUES(role), last_active_at = NOW()",
+            $chat_id,
+            $user_id,
+            $role
+        )
+    );
+
+    return $role;
+}}
+
+if ( ! function_exists( 'elxao_chat_update_participant_progress' ) ) {
+function elxao_chat_update_participant_progress( $chat_id, $user_id, $field, $value ) {
+    if ( ! in_array( $field, [ 'last_delivered_message_id', 'last_read_message_id' ], true ) ) {
+        return false;
+    }
+    if ( ! $chat_id || ! $user_id ) {
+        return false;
+    }
+
+    $value = (int) $value;
+    elxao_chat_ensure_participant( $chat_id, $user_id );
+
+    global $wpdb;
+    $table = $wpdb->prefix . ELXAO_CHAT_PARTICIPANTS_TABLE;
+    $wpdb->query(
+        $wpdb->prepare(
+            "UPDATE {$table}
+             SET {$field} = GREATEST({$field}, %d), last_active_at = NOW()
+             WHERE chat_id = %d AND user_id = %d",
+            $value,
+            $chat_id,
+            $user_id
+        )
+    );
+
+    return true;
+}}
+
+if ( ! function_exists( 'elxao_chat_get_participants_state' ) ) {
+function elxao_chat_get_participants_state( $chat_id ) {
+    if ( ! $chat_id ) {
+        return [];
+    }
+    global $wpdb;
+    $table = $wpdb->prefix . ELXAO_CHAT_PARTICIPANTS_TABLE;
+    $rows  = $wpdb->get_results(
+        $wpdb->prepare(
+            "SELECT user_id, role, last_delivered_message_id, last_read_message_id
+             FROM {$table}
+             WHERE chat_id = %d",
+            $chat_id
+        ),
+        ARRAY_A
+    );
+
+    $out = [];
+    foreach ( (array) $rows as $row ) {
+        $uid = (int) $row['user_id'];
+        $out[ $uid ] = [
+            'role'           => $row['role'],
+            'last_delivered' => (int) $row['last_delivered_message_id'],
+            'last_read'      => (int) $row['last_read_message_id'],
+        ];
+    }
+    return $out;
+}}
+
+if ( ! function_exists( 'elxao_chat_format_participants_state' ) ) {
+function elxao_chat_format_participants_state( $chat_id, $participants = null ) {
+    if ( null === $participants ) {
+        $participants = elxao_chat_get_participants_state( $chat_id );
+    }
+    $pm_id     = (int) get_post_meta( $chat_id, 'pm_id', true );
+    $client_id = (int) get_post_meta( $chat_id, 'client_id', true );
+
+    $formatted = [];
+    if ( $client_id ) {
+        $state = $participants[ $client_id ] ?? [ 'last_delivered' => 0, 'last_read' => 0 ];
+        $formatted['client'] = [
+            'role'          => 'client',
+            'user_id'       => $client_id,
+            'last_delivered'=> $state['last_delivered'] ?? 0,
+            'last_read'     => $state['last_read'] ?? 0,
+        ];
+    }
+    if ( $pm_id ) {
+        $state = $participants[ $pm_id ] ?? [ 'last_delivered' => 0, 'last_read' => 0 ];
+        $formatted['pm'] = [
+            'role'          => 'pm',
+            'user_id'       => $pm_id,
+            'last_delivered'=> $state['last_delivered'] ?? 0,
+            'last_read'     => $state['last_read'] ?? 0,
+        ];
+    }
+
+    $admins = [];
+    foreach ( $participants as $uid => $state ) {
+        if ( isset( $state['role'] ) && 'admin' === $state['role'] ) {
+            $admins[] = [
+                'role'          => 'admin',
+                'user_id'       => $uid,
+                'last_delivered'=> $state['last_delivered'],
+                'last_read'     => $state['last_read'],
+            ];
+        }
+    }
+    if ( ! empty( $admins ) ) {
+        $formatted['admins'] = $admins;
+    }
+
+    return $formatted;
+}}
+
+if ( ! function_exists( 'elxao_chat_sync_participants' ) ) {
+function elxao_chat_sync_participants( $chat_id ) {
+    if ( ! $chat_id ) {
+        return;
+    }
+    $pm_id     = (int) get_post_meta( $chat_id, 'pm_id', true );
+    $client_id = (int) get_post_meta( $chat_id, 'client_id', true );
+    if ( $pm_id ) {
+        elxao_chat_ensure_participant( $chat_id, $pm_id, 'pm' );
+    }
+    if ( $client_id ) {
+        elxao_chat_ensure_participant( $chat_id, $client_id, 'client' );
+    }
 }}
 
 /* ===== Force unified send icon (static file) on server render ===== */

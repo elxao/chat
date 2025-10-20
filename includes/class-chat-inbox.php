@@ -27,6 +27,28 @@ class ELXAO_Chat_Inbox {
         $p = ['#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#14b8a6','#64748b','#84cc16'];
         if(!$pid) return $p[0]; $i = absint($pid) % count($p); return $p[$i];
     }
+    private static function get_unread_count( $chat_id, $user_id ){
+        global $wpdb;
+        $messages_table      = $wpdb->prefix . ELXAO_CHAT_TABLE;
+        $participants_table  = $wpdb->prefix . ELXAO_CHAT_PARTICIPANTS_TABLE;
+
+        if ( function_exists( 'elxao_chat_ensure_participant' ) ) {
+            elxao_chat_ensure_participant( $chat_id, $user_id );
+        }
+
+        $last_read = $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT last_read_message_id FROM {$participants_table} WHERE chat_id=%d AND user_id=%d",
+                $chat_id,
+                $user_id
+            )
+        );
+        $last_read = $last_read ? (int) $last_read : 0;
+
+        $sql = "SELECT COUNT(*) FROM {$messages_table} WHERE chat_id=%d AND id>%d AND sender_id!=%d";
+        $count = $wpdb->get_var( $wpdb->prepare( $sql, $chat_id, $last_read, $user_id ) );
+        return $count ? (int) $count : 0;
+    }
     private static function get_last_message( $chat_id ){
         global $wpdb; $table = $wpdb->prefix . ELXAO_CHAT_TABLE;
         $row = $wpdb->get_row( $wpdb->prepare("SELECT id,sender_id,message,created_at FROM {$table} WHERE chat_id=%d ORDER BY id DESC LIMIT 1", $chat_id ), ARRAY_A );
@@ -45,7 +67,7 @@ class ELXAO_Chat_Inbox {
           <div class="inbox-left">
             <div class="inbox-search"><input type="search" class="inbox-search-input" placeholder="Search chats…" /></div>
             <div class="inbox-list">
-            <?php foreach( $ids as $i => $cid ): $pid = (int)get_post_meta($cid,'project_id',true); $title = $pid? get_the_title($pid):('Project #'.$pid); $last = self::get_last_message($cid); $active = $i===0 ? ' active' : ''; $color=self::color_for_project($pid); ?>
+            <?php foreach( $ids as $i => $cid ): $pid = (int)get_post_meta($cid,'project_id',true); $title = $pid? get_the_title($pid):('Project #'.$pid); $last = self::get_last_message($cid); $active = $i===0 ? ' active' : ''; $color=self::color_for_project($pid); $unread = self::get_unread_count($cid,$user_id); ?>
               <div class="thread<?php echo $active; ?>" data-chat="<?php echo esc_attr($cid); ?>" data-project="<?php echo esc_attr($pid); ?>">
                 <div class="avatar" style="background: <?php echo esc_attr($color); ?>;">
                   <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -53,7 +75,7 @@ class ELXAO_Chat_Inbox {
                   </svg>
                 </div>
                 <div class="meta">
-                  <div class="row"><div class="title"><?php echo esc_html($title); ?></div><div class="time"><?php echo $last? esc_html($last['created']):''; ?></div></div>
+                  <div class="row"><div class="title-wrap"><div class="title"><?php echo esc_html($title); ?></div><?php if($unread): ?><span class="badge" aria-label="<?php echo esc_attr($unread); ?> new messages"><?php echo esc_html($unread); ?></span><?php endif; ?></div><div class="time"><?php echo $last? esc_html($last['created']):''; ?></div></div>
                   <div class="preview"><?php echo $last? esc_html( wp_trim_words($last['message'],14) ) : 'No messages yet.'; ?></div>
                 </div>
               </div>

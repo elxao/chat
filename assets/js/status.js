@@ -37,47 +37,212 @@
     });
   }
 
-  async function markVisibleAsRead() {
-    if (!window.ELXAO_STATUS || !ELXAO_STATUS.restUrl) return;
-    const candidates = Array.from(document.querySelectorAll('.elxao-message[data-id][data-incoming="1"]'));
-    const visibleIds = candidates
-      .filter(n => n.offsetParent !== null)
-      .map(n => parseInt(n.getAttribute('data-id'), 10))
-      .filter(Number.isFinite);
-
-    if (!visibleIds.length) return;
-
-    try{
-      await fetch(ELXAO_STATUS.restUrl, {
-        method:'POST',
-        headers:{
-          'Content-Type':'application/json',
-          'X-WP-Nonce': ELXAO_STATUS.nonce || ''
-        },
-        credentials:'same-origin',
-        body: JSON.stringify({ ids: visibleIds })
-      });
-      // Met à jour l’UI immédiatement
-      visibleIds.forEach(id => {
-        const wrapper = document.querySelector('.elxao-message[data-id="'+id+'"]');
-        if (wrapper){
-          wrapper.setAttribute('data-status','read');
-          wrapper.setAttribute('data-read-at', new Date().toISOString());
-        }
-        const n = wrapper ? wrapper.querySelector('.elxao-msg-status') : null;
-        if (n){ n.classList.remove('sent','delivered'); n.classList.add('read'); n.setAttribute('aria-label','read'); }
-      });
-    }catch(e){
-      // silencieux
+  function isFiniteNumber(n){
+    if (Number.isFinite) {
+      return Number.isFinite(n);
     }
+    return isFinite(n);
+  }
+
+  function toInt(value){
+    var n = parseInt(value, 10);
+    return isFiniteNumber(n) ? n : 0;
+  }
+
+  function normalizeState(entry){
+    if(!entry) return null;
+    return {
+      role: entry.role || '',
+      last_delivered: toInt(entry.last_delivered),
+      last_read: toInt(entry.last_read)
+    };
+  }
+
+  function statusFromTarget(messageId, target){
+    if(!target) return null;
+    if(target.last_read >= messageId) return 'read';
+    if(target.last_delivered >= messageId) return 'delivered';
+    return 'sent';
+  }
+
+  function computeStatusFromParticipants(node, participants){
+    if(!participants || !node) return null;
+    if(node.getAttribute('data-incoming') === '1') return null;
+    var messageId = parseInt(node.getAttribute('data-id'), 10);
+    if(!isFiniteNumber(messageId)) return null;
+    var role = node.getAttribute('data-sender-role');
+    if(!role) return null;
+
+    var client = normalizeState(participants.client);
+    var pm = normalizeState(participants.pm);
+    var adminStates = [];
+    if(Array.isArray(participants.admins)){
+      participants.admins.forEach(function(entry){
+        var norm = normalizeState(entry);
+        if(norm){ adminStates.push(norm); }
+      });
+    }
+
+    if(role === 'pm'){
+      return statusFromTarget(messageId, client);
+    }
+    if(role === 'client'){
+      return statusFromTarget(messageId, pm);
+    }
+    if(role === 'admin'){
+      var targets = [];
+      if(client) targets.push(client);
+      if(pm) targets.push(pm);
+      if(!targets.length) return null;
+      var allDelivered = targets.every(function(target){ return target.last_delivered >= messageId; });
+      var allRead = targets.every(function(target){ return target.last_read >= messageId; });
+      if(allRead) return 'read';
+      if(allDelivered) return 'delivered';
+      return 'sent';
+    }
+
+    // Fallback: try to locate matching participant by role name
+    if(participants[role] && !Array.isArray(participants[role])){
+      return statusFromTarget(messageId, normalizeState(participants[role]));
+    }
+
+    // Or by matching admins with same role hint
+    var matchingAdmin = null;
+    for(var i=0;i<adminStates.length;i++){
+      if(adminStates[i].role === role){ matchingAdmin = adminStates[i]; break; }
+    }
+    if(matchingAdmin){
+      return statusFromTarget(messageId, matchingAdmin);
+    }
+
+    return null;
+  }
+
+  function refreshFromParticipants(win, participants){
+    if(!win || !participants) return;
+    var scope = win.querySelector('.elxao-chat-messages') || win;
+    scope.querySelectorAll('.elxao-message').forEach(function(node){
+      var status = computeStatusFromParticipants(node, participants);
+      if(!status) return;
+      node.setAttribute('data-status', status);
+    });
+    initStatuses(scope);
+  }
+
+  function isAtBottom(box){
+    if(!box) return false;
+    var diff = box.scrollHeight - box.scrollTop - box.clientHeight;
+    return diff <= 12;
+  }
+
+  function highestVisibleIncomingId(box){
+    if(!box) return 0;
+    var containerRect = box.getBoundingClientRect();
+    var maxId = 0;
+    box.querySelectorAll('.elxao-message[data-id][data-incoming="1"]').forEach(function(node){
+      if(node.offsetParent === null) return;
+      var rect = node.getBoundingClientRect();
+      var overlapTop = Math.max(rect.top, containerRect.top);
+      var overlapBottom = Math.min(rect.bottom, containerRect.bottom);
+      var visibleHeight = overlapBottom - overlapTop;
+      var nodeHeight = rect.height || (rect.bottom - rect.top);
+      if(visibleHeight <= 0) return;
+      if(nodeHeight <= 0) return;
+      var ratio = visibleHeight / nodeHeight;
+      if(ratio < 0.25) return;
+      var id = parseInt(node.getAttribute('data-id'), 10);
+      if(isFiniteNumber(id) && id > maxId){ maxId = id; }
+    });
+    return maxId;
+  }
+
+  function markVisibleAsRead() {
+    if (document.visibilityState === 'hidden') return;
+    if (typeof window.ELXAO_CHAT_MARK_READ !== 'function') return;
+
+    document.querySelectorAll('.elxao-chat-window').forEach(function(win){
+      if(win.offsetParent === null) return;
+      var chatId = parseInt(win.getAttribute('data-chat'), 10);
+      if(!chatId) return;
+      var box = win.querySelector('.elxao-chat-messages');
+      if(!box) return;
+      if(!isAtBottom(box)) return;
+      var maxId = highestVisibleIncomingId(box);
+      if(maxId){
+        window.ELXAO_CHAT_MARK_READ(chatId, maxId);
+      }
+    });
+  }
+
+  var markReadRaf = null;
+  function requestMarkVisibleAsRead(){
+    if(markReadRaf !== null){ return; }
+    markReadRaf = window.requestAnimationFrame(function(){
+      markReadRaf = null;
+      markVisibleAsRead();
+    });
+  }
+
+  function bindScrollHandlers(scope){
+    (scope || document).querySelectorAll('.elxao-chat-messages').forEach(function(box){
+      if(box.__elxaoScrollBound){ return; }
+      box.__elxaoScrollBound = true;
+      box.addEventListener('scroll', requestMarkVisibleAsRead, { passive: true });
+    });
   }
 
   // Initialise au chargement
   document.addEventListener('DOMContentLoaded', function(){
     initStatuses(document);
+    bindScrollHandlers(document);
     markVisibleAsRead();
   });
 
   // Expose si tu re-rendes dynamiquement
-  window.ELXAO_STATUS_UI = { initStatuses, markVisibleAsRead };
+  window.ELXAO_STATUS_UI = {
+    initStatuses: function(scope){
+      initStatuses(scope);
+      bindScrollHandlers(scope);
+    },
+    markVisibleAsRead: markVisibleAsRead,
+    refreshFromParticipants: refreshFromParticipants,
+    _bindScrollHandlers: bindScrollHandlers
+  };
+
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState !== 'hidden'){ markVisibleAsRead(); }
+  });
+
+  window.addEventListener('resize', function(){
+    markVisibleAsRead();
+  });
+
+  window.addEventListener('focus', function(){
+    requestMarkVisibleAsRead();
+  });
+
+  if (window.MutationObserver) {
+    var mo = new MutationObserver(function(mutations){
+      var shouldMark = false;
+      mutations.forEach(function(mutation){
+        mutation.addedNodes && mutation.addedNodes.forEach(function(node){
+          if(node.nodeType !== 1){ return; }
+          if(node.matches && node.matches('.elxao-chat-window, .elxao-chat-messages')){
+            bindScrollHandlers(node);
+            shouldMark = true;
+            return;
+          }
+          if(node.querySelector){
+            var found = node.querySelector('.elxao-chat-messages');
+            if(found){
+              bindScrollHandlers(node);
+              shouldMark = true;
+            }
+          }
+        });
+      });
+      if(shouldMark){ requestMarkVisibleAsRead(); }
+    });
+    mo.observe(document.documentElement || document.body, { childList: true, subtree: true });
+  }
 })();

@@ -10,23 +10,11 @@ class ELXAO_Chat_Render {
         wp_enqueue_style( 'elxao-chat' );
         wp_enqueue_script( 'elxao-chat' );
         $nonce = wp_create_nonce( 'elxao_chat_nonce' );
-        $realtime_endpoint = add_query_arg(
-            [
-                'elxao_chat_stream' => 1,
-            ],
-            home_url( '/' )
-        );
-
         wp_localize_script( 'elxao-chat', 'ELXAO_CHAT', [
             'ajaxurl'   => admin_url( 'admin-ajax.php' ),
             'nonce'     => $nonce,
             'chatId'    => (int) $chat_id,
             'fetchFreq' => 4000,
-            'realtime'  => [
-                'enabled'      => true,
-                'endpoint'     => esc_url_raw( $realtime_endpoint ),
-                'fallbackFreq' => 15000,
-            ],
         ]);
     }
     public static function shortcode_chat_window( $atts ){
