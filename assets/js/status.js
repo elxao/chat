@@ -48,6 +48,100 @@
     });
   }
 
+  function normaliseParticipantState(raw) {
+    if (!raw) return null;
+    var lastDelivered = parseInt(
+      raw.last_delivered !== undefined ? raw.last_delivered : (raw.lastDelivered || 0),
+      10
+    );
+    var lastRead = parseInt(
+      raw.last_read !== undefined ? raw.last_read : (raw.lastRead || 0),
+      10
+    );
+    return {
+      lastDelivered: isNaN(lastDelivered) ? 0 : lastDelivered,
+      lastRead: isNaN(lastRead) ? 0 : lastRead,
+    };
+  }
+
+  function computeStatusForMessage(messageId, senderRole, participants) {
+    if (!messageId) return 'sent';
+    if (!senderRole) senderRole = '';
+    var role = String(senderRole).toLowerCase();
+    var targets = [];
+
+    if (role === 'pm') {
+      if (participants && participants.client) {
+        targets.push(normaliseParticipantState(participants.client));
+      }
+    } else if (role === 'client') {
+      if (participants && participants.pm) {
+        targets.push(normaliseParticipantState(participants.pm));
+      }
+    } else if (role === 'admin') {
+      if (participants && participants.client) {
+        targets.push(normaliseParticipantState(participants.client));
+      }
+      if (participants && participants.pm) {
+        targets.push(normaliseParticipantState(participants.pm));
+      }
+    } else if (participants && participants[role]) {
+      targets.push(normaliseParticipantState(participants[role]));
+    }
+
+    var hasTarget = false;
+    var allDelivered = true;
+    var allRead = true;
+
+    targets.forEach(function (target) {
+      if (!target) {
+        allDelivered = false;
+        allRead = false;
+        return;
+      }
+      hasTarget = true;
+      if (target.lastDelivered < messageId) {
+        allDelivered = false;
+      }
+      if (target.lastRead < messageId) {
+        allRead = false;
+      }
+    });
+
+    if (!hasTarget) return 'sent';
+    if (allRead) return 'read';
+    if (allDelivered) return 'delivered';
+    return 'sent';
+  }
+
+  function applyStatusFromParticipants(node, participants) {
+    if (!node) return;
+    var incomingAttr = node.getAttribute('data-incoming');
+    var isOutgoing = incomingAttr === '0' || node.classList.contains('me');
+    if (!isOutgoing) return;
+
+    var id = parseInt(node.getAttribute('data-id') || '0', 10);
+    if (!id) return;
+    var role = node.getAttribute('data-sender-role') || '';
+    var status = computeStatusForMessage(id, role, participants);
+
+    if (status === 'read') {
+      node.setAttribute('data-status', 'read');
+      node.setAttribute('data-delivered-at', '1');
+      node.setAttribute('data-read-at', '1');
+    } else if (status === 'delivered') {
+      node.setAttribute('data-status', 'delivered');
+      node.setAttribute('data-delivered-at', '1');
+      node.removeAttribute('data-read-at');
+    } else {
+      node.setAttribute('data-status', 'sent');
+      node.removeAttribute('data-delivered-at');
+      node.removeAttribute('data-read-at');
+    }
+
+    applyTick(node);
+  }
+
   // Collect IDs of visible incoming messages to mark as read
   function getVisibleIncomingMessageIds() {
     var ids = [];
@@ -119,6 +213,13 @@
   };
   window.ELXAO_STATUS_UI.markVisibleAsRead = markVisibleAsRead;
   window.ELXAO_STATUS_UI.refreshAllTicks = refreshAllTicks;
+  window.ELXAO_STATUS_UI.refreshFromParticipants = function (scope, participants) {
+    if (!participants) return;
+    var root = scope || document;
+    root.querySelectorAll('.elxao-message').forEach(function (node) {
+      applyStatusFromParticipants(node, participants);
+    });
+  };
 
   // Re-mark when the DOM changes (new messages appended, chat switches, etc.)
   var mo = new MutationObserver(function (mutations) {
