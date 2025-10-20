@@ -2,7 +2,7 @@
 /*
 Plugin Name: Chat
 Description: Private per-project chat (client, PM, admin) with read receipts and WhatsApp-style inbox sorting.
-Version: 1.4.2
+Version: 1.4.3
 Author: ELXAO
 */
 

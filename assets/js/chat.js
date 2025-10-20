@@ -75,6 +75,19 @@
     if(m.delivered_at){ attrs += ' data-delivered-at="'+m.delivered_at+'"'; }
     if(m.read_at){ attrs += ' data-read-at="'+m.read_at+'"'; }
     if(m.sender_role){ attrs += ' data-sender-role="'+m.sender_role+'"'; }
+    if(m.recipients){
+      var cr = m.recipients.client || {}, pr = m.recipients.pm || {};
+      if(typeof cr.delivered!=='undefined') attrs += ' data-client-delivered="'+(cr.delivered?'1':'0')+'"';
+      if(typeof cr.read!=='undefined') attrs += ' data-client-read="'+(cr.read?'1':'0')+'"';
+      if(typeof pr.delivered!=='undefined') attrs += ' data-pm-delivered="'+(pr.delivered?'1':'0')+'"';
+      if(typeof pr.read!=='undefined') attrs += ' data-pm-read="'+(pr.read?'1':'0')+'"';
+
+      // Title to help admin: "Client: Read/Delivered — PM: Read/Delivered"
+      var ct = 'Client: ' + (cr.read ? 'Read' : (cr.delivered ? 'Delivered' : 'Sent'));
+      var pt = 'PM: ' + (pr.read ? 'Read' : (pr.delivered ? 'Delivered' : 'Sent'));
+      attrs += ' data-status-title="'+(ct+' — '+pt).replace(/"/g,'&quot;')+'"';
+    }
+
 
     var metaParts = [];
     if(m.sender){ metaParts.push(m.sender); }
