@@ -17,6 +17,21 @@
     });
   }
 
+  function dispatchReadEvent(chatId, lastId){
+    var detail = { chatId: chatId, lastId: lastId };
+    try {
+      var evt = new CustomEvent('elxaoChatRead', { detail: detail });
+      document.dispatchEvent(evt);
+    } catch (err) {
+      var legacyEvt = document.createEvent('CustomEvent');
+      legacyEvt.initCustomEvent('elxaoChatRead', true, true, detail);
+      document.dispatchEvent(legacyEvt);
+    }
+    if (window.jQuery) {
+      window.jQuery(document).trigger('elxaoChatRead', [ detail ]);
+    }
+  }
+
   window.ELXAO_CHAT_MARK_READ = function(chatId, lastId){
     chatId = parseInt(chatId, 10);
     lastId = parseInt(lastId, 10);
@@ -35,6 +50,7 @@
         var $win = $('.elxao-chat-window[data-chat="'+chatId+'"]').first();
         if($win.length){ window.ELXAO_STATUS_UI.initStatuses($win[0]); }
       }
+      dispatchReadEvent(chatId, lastId);
     }, function(){
       delete readAckState.pending[chatId];
     });
