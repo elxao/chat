@@ -71,7 +71,6 @@
 .elxao-chat-message.me{justify-content:flex-end;}
 .elxao-chat-message.me .bubble{background:var(--bg-bubble-user);} /* beige sent bubble */
 .elxao-chat-meta{font-size:11px;color:var(--text-muted);margin-top:4px;display:flex;align-items:center;gap:6px;}
-.elxao-chat-meta .meta-text{display:inline-flex;align-items:center;}
 .elxao-chat-meta .ticks{display:inline-block;vertical-align:middle;}
 
 /* ---------- Input capsule (ChatGPT-like) ---------- */
