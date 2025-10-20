@@ -44,12 +44,8 @@ register_activation_hook( __FILE__, 'elxao_chat_activate' );
 
 /* ===== Init / assets ===== */
 add_action( 'init', function(){
-    if ( class_exists('ELXAO_Chat_PostType') ) {
+    if ( class_exists('ELXAO_Chat_PostType') )
         ELXAO_Chat_PostType::register_cpt();
-        if ( is_admin() ) {
-            ELXAO_Chat_PostType::register_admin_hooks();
-        }
-    }
 });
 add_action( 'save_post_project', function($id,$post,$update){
     if ( class_exists('ELXAO_Chat_PostType') )
