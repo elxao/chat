@@ -19,6 +19,9 @@ class ELXAO_Chat_PostType {
                 if ( $chat_id ) {
                     update_post_meta( $chat_id, 'pm_id', $pm_id );
                     update_post_meta( $chat_id, 'client_id', $client_id );
+                    if ( function_exists( 'elxao_chat_sync_participants' ) ) {
+                        elxao_chat_sync_participants( $chat_id );
+                    }
                 }
             }
         }

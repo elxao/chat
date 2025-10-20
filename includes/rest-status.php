@@ -17,22 +17,50 @@ add_action('rest_api_init', function(){
       ],
     ],
     'callback' => function(WP_REST_Request $req){
-      $ids = array_map('intval', (array) $req->get_param('ids'));
-      $user_id = get_current_user_id();
+      $ids = array_values( array_unique( array_filter( array_map( 'intval', (array) $req->get_param('ids') ) ) ) );
+      if ( empty( $ids ) ) {
+        return new WP_REST_Response( [ 'ok' => false, 'updated' => 0 ], 200 );
+      }
 
-      // TODO: remplace par ta logique d’autorisation (le user peut-il lire ces messages ?)
-      foreach($ids as $mid){
-        // Si tes messages sont des posts :
-        // - Vérifie l’appartenance: elxao_user_can_read_message($user_id, $mid)
-        // - Ici, on passe delivered|sent -> read, on date read_at
-        $current = get_post_meta($mid, 'elxao_status', true);
-        if ($current !== 'read'){
-          update_post_meta($mid, 'elxao_status', 'read');
-          update_post_meta($mid, 'elxao_read_at', time());
+      global $wpdb;
+      $messages_table = $wpdb->prefix . ELXAO_CHAT_TABLE;
+      $placeholders   = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+      $rows = $wpdb->get_results(
+        $wpdb->prepare(
+          "SELECT id, chat_id FROM {$messages_table} WHERE id IN ($placeholders)",
+          $ids
+        ),
+        ARRAY_A
+      );
+
+      if ( empty( $rows ) ) {
+        return new WP_REST_Response( [ 'ok' => true, 'updated' => 0 ], 200 );
+      }
+
+      $by_chat = [];
+      foreach ( $rows as $row ) {
+        $chat_id = (int) $row['chat_id'];
+        $id      = (int) $row['id'];
+        if ( ! isset( $by_chat[ $chat_id ] ) || $id > $by_chat[ $chat_id ] ) {
+          $by_chat[ $chat_id ] = $id;
         }
       }
 
-      return new WP_REST_Response(['ok'=>true,'updated'=>count($ids)], 200);
+      $user_id = get_current_user_id();
+      $updated = 0;
+      foreach ( $by_chat as $chat_id => $max_id ) {
+        $project_id = (int) get_post_meta( $chat_id, 'project_id', true );
+        if ( ! $project_id || ! elxao_chat_user_can_access( $project_id, $user_id ) ) {
+          continue;
+        }
+        if ( function_exists( 'elxao_chat_update_participant_progress' ) ) {
+          elxao_chat_update_participant_progress( $chat_id, $user_id, 'last_read_message_id', $max_id );
+          elxao_chat_update_participant_progress( $chat_id, $user_id, 'last_delivered_message_id', $max_id );
+        }
+        $updated++;
+      }
+
+      return new WP_REST_Response( [ 'ok' => true, 'updated' => $updated ], 200 );
     }
   ]);
 });
