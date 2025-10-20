@@ -2,15 +2,16 @@
 /*
 Plugin Name: Chat
 Description: Private per-project chat (client, PM, admin) with read receipts and WhatsApp-style inbox sorting.
-Version: 1.4.6
+Version: 1.4.7
 Author: ELXAO
 */
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-if ( ! defined('ELXAO_CHAT_VERSION') ) define( 'ELXAO_CHAT_VERSION', '1.4.6' );
+if ( ! defined('ELXAO_CHAT_VERSION') ) define( 'ELXAO_CHAT_VERSION', '1.4.7' );
 if ( ! defined('ELXAO_CHAT_DIR') ) define( 'ELXAO_CHAT_DIR', plugin_dir_path( __FILE__ ) );
 if ( ! defined('ELXAO_CHAT_URL') ) define( 'ELXAO_CHAT_URL', plugin_dir_url( __FILE__ ) );
+if ( ! defined('ELXAO_CHAT_SAFE_MODE') ) define( 'ELXAO_CHAT_SAFE_MODE', true );
 if ( ! defined('ELXAO_CHAT_TABLE') ) define( 'ELXAO_CHAT_TABLE', 'elxao_chat_messages' );
 if ( ! defined('ELXAO_CHAT_PARTICIPANTS_TABLE') ) define( 'ELXAO_CHAT_PARTICIPANTS_TABLE', 'elxao_chat_participants' );
 if ( ! defined('ELXAO_CHAT_RECEIPTS_TABLE') ) define( 'ELXAO_CHAT_RECEIPTS_TABLE', 'elxao_chat_receipts' );
@@ -361,6 +362,6 @@ add_action('wp_footer', function () {
 
 
 /* ===== Include REST endpoint for read receipts ===== */
-require_once ELXAO_CHAT_DIR . 'includes/rest-status.php';
+if ( ! ELXAO_CHAT_SAFE_MODE ) { require_once ELXAO_CHAT_DIR . 'includes/rest-status.php'; }
 
-require_once ELXAO_CHAT_DIR . 'includes/class-chat-status-loader.php';
+if ( ! ELXAO_CHAT_SAFE_MODE ) { require_once ELXAO_CHAT_DIR . 'includes/class-chat-status-loader.php'; }
