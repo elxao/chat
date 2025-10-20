@@ -2,30 +2,35 @@
 /*
 Plugin Name: Chat
 Description: Private per-project chat (client, PM, admin) with read receipts and WhatsApp-style inbox sorting.
-Version: 1.3.2
+Version: 1.4.0
 Author: ELXAO
 */
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-if ( ! defined('ELXAO_CHAT_VERSION') ) define( 'ELXAO_CHAT_VERSION', '1.3.2' );
+if ( ! defined('ELXAO_CHAT_VERSION') ) define( 'ELXAO_CHAT_VERSION', '1.4.0' );
 if ( ! defined('ELXAO_CHAT_DIR') ) define( 'ELXAO_CHAT_DIR', plugin_dir_path( __FILE__ ) );
 if ( ! defined('ELXAO_CHAT_URL') ) define( 'ELXAO_CHAT_URL', plugin_dir_url( __FILE__ ) );
 if ( ! defined('ELXAO_CHAT_TABLE') ) define( 'ELXAO_CHAT_TABLE', 'elxao_chat_messages' );
+if ( ! defined('ELXAO_CHAT_CURSOR_TABLE') ) define( 'ELXAO_CHAT_CURSOR_TABLE', 'elxao_chat_cursors' );
 
 require_once ELXAO_CHAT_DIR . 'includes/class-chat-posttype.php';
 require_once ELXAO_CHAT_DIR . 'includes/class-chat-render.php';
 require_once ELXAO_CHAT_DIR . 'includes/class-chat-ajax.php';
 require_once ELXAO_CHAT_DIR . 'includes/class-chat-list.php';
 require_once ELXAO_CHAT_DIR . 'includes/class-chat-inbox.php';
+require_once ELXAO_CHAT_DIR . 'includes/class-chat-realtime.php';
+require_once ELXAO_CHAT_DIR . 'includes/rest-status.php';
 
-/* ===== Activation ===== */
-if ( ! function_exists('elxao_chat_activate') ) {
-function elxao_chat_activate() {
+if ( ! function_exists( 'elxao_chat_install_schema' ) ) {
+function elxao_chat_install_schema() {
     global $wpdb;
-    $table_name = $wpdb->prefix . ELXAO_CHAT_TABLE;
+
+    $messages_table = $wpdb->prefix . ELXAO_CHAT_TABLE;
+    $cursor_table   = $wpdb->prefix . ELXAO_CHAT_CURSOR_TABLE;
     $charset_collate = $wpdb->get_charset_collate();
-    $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
+
+    $sql_messages = "CREATE TABLE {$messages_table} (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
         chat_id BIGINT UNSIGNED NOT NULL,
         sender_id BIGINT UNSIGNED NOT NULL,
@@ -33,14 +38,49 @@ function elxao_chat_activate() {
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY  (id),
         KEY chat_id_idx (chat_id),
-        KEY sender_id_idx (sender_id)
+        KEY sender_id_idx (sender_id),
+        KEY idx_chat_created (chat_id, created_at),
+        KEY idx_sender_created (sender_id, created_at)
     ) {$charset_collate};";
+
+    $sql_cursors = "CREATE TABLE {$cursor_table} (
+        chat_id BIGINT UNSIGNED NOT NULL,
+        user_id BIGINT UNSIGNED NOT NULL,
+        cursor_type VARCHAR(20) NOT NULL,
+        message_id BIGINT UNSIGNED NOT NULL,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (chat_id, user_id, cursor_type),
+        KEY idx_cursor_message (message_id),
+        KEY idx_cursor_user_type (user_id, cursor_type)
+    ) {$charset_collate};";
+
     require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-    dbDelta( $sql );
+    dbDelta( $sql_messages );
+    dbDelta( $sql_cursors );
+}
+}
+
+if ( ! function_exists( 'elxao_chat_maybe_upgrade' ) ) {
+function elxao_chat_maybe_upgrade() {
+    $installed = get_option( 'elxao_chat_db_version' );
+    if ( version_compare( (string) $installed, ELXAO_CHAT_VERSION, '<' ) ) {
+        elxao_chat_install_schema();
+        update_option( 'elxao_chat_db_version', ELXAO_CHAT_VERSION );
+    }
+}
+}
+
+/* ===== Activation ===== */
+if ( ! function_exists('elxao_chat_activate') ) {
+function elxao_chat_activate() {
+    elxao_chat_install_schema();
     if ( class_exists('ELXAO_Chat_PostType') ) { ELXAO_Chat_PostType::register_cpt(); }
+    update_option( 'elxao_chat_db_version', ELXAO_CHAT_VERSION );
     flush_rewrite_rules();
 }}
 register_activation_hook( __FILE__, 'elxao_chat_activate' );
+
+add_action( 'plugins_loaded', 'elxao_chat_maybe_upgrade' );
 
 /* ===== Init / assets ===== */
 add_action( 'init', function(){
