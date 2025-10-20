@@ -4,11 +4,46 @@ if ( ! class_exists('ELXAO_Chat_List') ) {
 class ELXAO_Chat_List {
     private static function can_admin_all( $user_id ){ return user_can( $user_id, 'administrator' ); }
     private static function get_user_chats( $user_id, $limit = 200 ){
-        $args = ['post_type'=>'elxao_chat','posts_per_page'=>$limit,'orderby'=>'date','order'=>'DESC','fields'=>'ids'];
+        $args = ['post_type'=>'elxao_chat','posts_per_page'=>$limit,'fields'=>'ids'];
         if ( ! self::can_admin_all( $user_id ) ){
             $args['meta_query'] = ['relation'=>'OR',['key'=>'pm_id','value'=>$user_id,'compare'=>'='],['key'=>'client_id','value'=>$user_id,'compare'=>'=']];
         }
-        $q = new WP_Query($args); return $q->posts;
+        $q = new WP_Query($args); $chat_ids = $q->posts;
+        if ( empty( $chat_ids ) ) return $chat_ids;
+
+        global $wpdb; $table = $wpdb->prefix . ELXAO_CHAT_TABLE;
+        $params = array_map('intval', $chat_ids);
+        $last_activity = [];
+        if ( ! empty( $params ) ) {
+            $placeholders = implode(',', array_fill(0, count($params), '%d'));
+            $query = "SELECT chat_id, MAX(created_at) AS last_created FROM {$table} WHERE chat_id IN ({$placeholders}) GROUP BY chat_id";
+            $prepared = call_user_func_array( [$wpdb, 'prepare'], array_merge( [$query], $params ) );
+            $rows = $wpdb->get_results( $prepared, ARRAY_A );
+            foreach ( $rows as $row ) {
+                $cid = (int) $row['chat_id'];
+                $last_activity[$cid] = $row['last_created'] ? mysql2date('U', $row['last_created'], true) : 0;
+            }
+        }
+
+        $fallback_dates = [];
+        foreach ( $chat_ids as $cid ) {
+            if ( isset( $last_activity[$cid] ) ) continue;
+            $modified = get_post_field( 'post_modified_gmt', $cid );
+            $created = $modified ? $modified : get_post_field( 'post_date_gmt', $cid );
+            $fallback_dates[$cid] = $created ? mysql2date('U', $created, true) : 0;
+        }
+
+        $original_order = array_flip( $chat_ids );
+        usort( $chat_ids, function( $a, $b ) use ( $last_activity, $fallback_dates, $original_order ){
+            $time_a = isset( $last_activity[$a] ) ? $last_activity[$a] : ( isset( $fallback_dates[$a] ) ? $fallback_dates[$a] : 0 );
+            $time_b = isset( $last_activity[$b] ) ? $last_activity[$b] : ( isset( $fallback_dates[$b] ) ? $fallback_dates[$b] : 0 );
+            if ( $time_a === $time_b ) {
+                return $original_order[$a] <=> $original_order[$b];
+            }
+            return ( $time_a > $time_b ) ? -1 : 1;
+        } );
+
+        return $chat_ids;
     }
     private static function get_last_message( $chat_id ){
         global $wpdb; $table = $wpdb->prefix . ELXAO_CHAT_TABLE;
