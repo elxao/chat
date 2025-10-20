@@ -61,42 +61,46 @@ class ELXAO_Chat_Ajax {
                 'delivered' => $pm_state ? ( $pm_state['last_delivered'] >= $message_id ) : false,
                 'read'      => $pm_state ? ( $pm_state['last_read'] >= $message_id ) : false,
             ];
-            $targets       = [];
-            $has_target    = false;
-            $all_delivered = true;
-            $all_read      = true;
 
-            if ( $client_id ) {
+            $targets       = [];
+            $has_state     = false;
+            $any_delivered = false;
+            $any_read      = false;
+
+            if ( $client_id && $client_state ) {
                 $targets[] = $client_state;
             }
-            if ( $pm_id ) {
+            if ( $pm_id && $pm_state ) {
                 $targets[] = $pm_state;
             }
 
             foreach ( $targets as $target ) {
                 if ( ! $target ) {
-                    $all_delivered = false;
-                    $all_read      = false;
                     continue;
                 }
-                $has_target = true;
-                if ( $target['last_delivered'] < $message_id ) {
-                    $all_delivered = false;
+
+                $has_state = true;
+
+                if ( $target['last_delivered'] >= $message_id ) {
+                    $any_delivered = true;
                 }
-                if ( $target['last_read'] < $message_id ) {
-                    $all_read = false;
+                if ( $target['last_read'] >= $message_id ) {
+                    $any_read      = true;
+                    $any_delivered = true;
                 }
             }
 
-            if ( $has_target && $all_read ) {
+            if ( $has_state && $any_read ) {
                 $result['status']    = 'read';
                 $result['delivered'] = true;
                 $result['read']      = true;
-            } elseif ( $has_target && $all_delivered ) {
+            } elseif ( $has_state && $any_delivered ) {
                 $result['status']    = 'delivered';
                 $result['delivered'] = true;
             } else {
-                $result['status'] = 'sent';
+                $result['status']    = 'sent';
+                $result['delivered'] = false;
+                $result['read']      = false;
             }
 
             return $result;

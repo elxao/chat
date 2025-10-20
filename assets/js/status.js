@@ -133,43 +133,39 @@
       promote(participants.pm);
     } else if (role === 'admin') {
       var targets = [];
-      if (participants.client && participants.client.user_id) {
-        targets.push(participants.client);
-      } else if (participants.client) {
+      if (participants.client) {
         targets.push(participants.client);
       }
-      if (participants.pm && participants.pm.user_id) {
-        targets.push(participants.pm);
-      } else if (participants.pm) {
+      if (participants.pm) {
         targets.push(participants.pm);
       }
 
-      var hasTarget = false;
-      var allDelivered = true;
-      var allRead = true;
+      var hasState = false;
+      var anyDelivered = false;
+      var anyRead = false;
 
       targets.forEach(function (state) {
         if (!state) {
-          allDelivered = false;
-          allRead = false;
           return;
         }
-        hasTarget = true;
-        if ((state.last_delivered || 0) < id) {
-          allDelivered = false;
+        hasState = true;
+        if ((state.last_delivered || 0) >= id) {
+          anyDelivered = true;
         }
-        if ((state.last_read || 0) < id) {
-          allRead = false;
+        if ((state.last_read || 0) >= id) {
+          anyRead = true;
+          anyDelivered = true;
         }
       });
 
-      if (hasTarget && allRead) {
+      if (hasState && anyRead) {
         status = 'read';
         delivered = true;
         read = true;
-      } else if (hasTarget && allDelivered) {
+      } else if (hasState && anyDelivered) {
         status = 'delivered';
         delivered = true;
+        read = false;
       } else {
         status = 'sent';
         delivered = false;
