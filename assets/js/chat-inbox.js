@@ -40,11 +40,26 @@
     req.done(function(resp){
       $win.data('loading',false);
       $box.find('.elxao-chat-loading').remove();
+      var participants = (resp && resp.data) ? resp.data.participants : null;
+      if(participants){
+        window.ELXAO_CHAT_PARTICIPANTS = window.ELXAO_CHAT_PARTICIPANTS || {};
+        window.ELXAO_CHAT_PARTICIPANTS[chatId] = participants;
+      }
       var msgs=(resp && resp.data && resp.data.messages)?resp.data.messages:[];
       if(msgs.length){
         appendMsgs($box,msgs);
         for(var i=0;i<msgs.length;i++){ var id=msgs[i].id||0; if(id>lastId) lastId=id; }
         $box.attr('data-last', lastId);
+      }
+      if(window.ELXAO_STATUS_UI){
+        if(participants && typeof window.ELXAO_STATUS_UI.refreshFromParticipants === 'function'){
+          window.ELXAO_STATUS_UI.refreshFromParticipants($win[0], participants);
+        } else if(typeof window.ELXAO_STATUS_UI.initStatuses === 'function'){
+          window.ELXAO_STATUS_UI.initStatuses($box[0]);
+        }
+        if(typeof window.ELXAO_STATUS_UI.markVisibleAsRead === 'function'){
+          window.requestAnimationFrame(function(){ window.ELXAO_STATUS_UI.markVisibleAsRead(); });
+        }
       }
     }).fail(function(){
       $win.data('loading',false);
