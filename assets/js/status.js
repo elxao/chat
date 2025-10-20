@@ -53,6 +53,160 @@
     });
   }
 
+  function parseId(node) {
+    var raw = node ? node.getAttribute('data-id') : null;
+    if (!raw) return 0;
+    var id = parseInt(raw, 10);
+    return isNaN(id) ? 0 : id;
+  }
+
+  function truthyAttr(node, attr, flag, value) {
+    if (!node) return;
+    if (flag) {
+      node.setAttribute(attr, typeof value === 'undefined' ? '1' : String(value));
+    } else {
+      node.removeAttribute(attr);
+    }
+  }
+
+  function stateAtThreshold(state, id) {
+    if (!state) {
+      return { delivered: false, read: false, has: false };
+    }
+    var delivered = (state.last_delivered || 0) >= id;
+    var read = (state.last_read || 0) >= id;
+    return { delivered: delivered, read: read, has: true };
+  }
+
+  function labelForState(state, id) {
+    var info = stateAtThreshold(state, id);
+    if (!info.has) return 'Sent';
+    if (info.read) return 'Read';
+    if (info.delivered) return 'Delivered';
+    return 'Sent';
+  }
+
+  function setAdminBreakdown(node, id, participants) {
+    if (!node) return;
+    var client = participants && participants.client ? participants.client : null;
+    var pm = participants && participants.pm ? participants.pm : null;
+
+    var clientInfo = stateAtThreshold(client, id);
+    var pmInfo = stateAtThreshold(pm, id);
+
+    truthyAttr(node, 'data-client-delivered', clientInfo.has, clientInfo.delivered ? '1' : '0');
+    truthyAttr(node, 'data-client-read', clientInfo.has, clientInfo.read ? '1' : '0');
+    truthyAttr(node, 'data-pm-delivered', pmInfo.has, pmInfo.delivered ? '1' : '0');
+    truthyAttr(node, 'data-pm-read', pmInfo.has, pmInfo.read ? '1' : '0');
+
+    var title = 'Client: ' + labelForState(client, id) + ' — PM: ' + labelForState(pm, id);
+    node.setAttribute('data-status-title', title);
+  }
+
+  function computeStatusFromParticipants(node, participants) {
+    if (!node || !participants) return null;
+    if (node.getAttribute('data-incoming') === '1') return null;
+
+    var id = parseId(node);
+    if (!id) return null;
+
+    var role = node.getAttribute('data-sender-role') || '';
+    var status = 'sent';
+    var delivered = false;
+    var read = false;
+
+    function promote(state) {
+      if (!state) return;
+      if ((state.last_read || 0) >= id) {
+        status = 'read';
+        delivered = true;
+        read = true;
+      } else if ((state.last_delivered || 0) >= id) {
+        if (!read) status = 'delivered';
+        delivered = true;
+      }
+    }
+
+    if (role === 'pm') {
+      promote(participants.client);
+    } else if (role === 'client') {
+      promote(participants.pm);
+    } else if (role === 'admin') {
+      var targets = [];
+      if (participants.client && participants.client.user_id) {
+        targets.push(participants.client);
+      } else if (participants.client) {
+        targets.push(participants.client);
+      }
+      if (participants.pm && participants.pm.user_id) {
+        targets.push(participants.pm);
+      } else if (participants.pm) {
+        targets.push(participants.pm);
+      }
+
+      var hasTarget = false;
+      var allDelivered = true;
+      var allRead = true;
+
+      targets.forEach(function (state) {
+        if (!state) {
+          allDelivered = false;
+          allRead = false;
+          return;
+        }
+        hasTarget = true;
+        if ((state.last_delivered || 0) < id) {
+          allDelivered = false;
+        }
+        if ((state.last_read || 0) < id) {
+          allRead = false;
+        }
+      });
+
+      if (hasTarget && allRead) {
+        status = 'read';
+        delivered = true;
+        read = true;
+      } else if (hasTarget && allDelivered) {
+        status = 'delivered';
+        delivered = true;
+      } else {
+        status = 'sent';
+        delivered = false;
+        read = false;
+      }
+
+      setAdminBreakdown(node, id, participants);
+    } else {
+      // Fallback: take the "highest" status among known recipients
+      promote(participants.client);
+      promote(participants.pm);
+    }
+
+    return {
+      id: id,
+      status: status,
+      delivered: delivered,
+      read: read
+    };
+  }
+
+  function applyStatusFromParticipants(node, participants) {
+    var info = computeStatusFromParticipants(node, participants);
+    if (!info) return;
+
+    if (info.status) {
+      node.setAttribute('data-status', info.status);
+    } else {
+      node.removeAttribute('data-status');
+    }
+
+    truthyAttr(node, 'data-delivered-at', info.delivered, info.id);
+    truthyAttr(node, 'data-read-at', info.read, info.id);
+
+    applyTick(node);
+  }
+
   // Collect IDs of visible incoming messages to mark as read
   function getVisibleIncomingMessageIds() {
     var ids = [];
@@ -124,6 +278,34 @@
   };
   window.ELXAO_STATUS_UI.markVisibleAsRead = markVisibleAsRead;
   window.ELXAO_STATUS_UI.refreshAllTicks = refreshAllTicks;
+  window.ELXAO_STATUS_UI.refreshFromParticipants = function (scope, participants) {
+    if (!participants) return;
+    var root = document;
+    if (scope) {
+      if (scope.jquery && scope.length) {
+        scope = scope[0];
+      }
+      if (scope.querySelectorAll) {
+        root = scope;
+      } else if (scope.nodeType === 1 && scope.matches('.elxao-message, .elxao-chat-window, .elxao-chat-messages')) {
+        root = scope;
+      }
+    }
+
+    var nodes = [];
+    if (root.matches && root.matches('.elxao-message')) {
+      nodes.push(root);
+    }
+    if (root.querySelectorAll) {
+      root.querySelectorAll('.elxao-message').forEach(function (node) {
+        nodes.push(node);
+      });
+    }
+
+    nodes.forEach(function (node) {
+      applyStatusFromParticipants(node, participants);
+    });
+  };
 
   // Re-mark when the DOM changes (new messages appended, chat switches, etc.)
   var mo = new MutationObserver(function (mutations) {
