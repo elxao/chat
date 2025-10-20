@@ -174,14 +174,40 @@
     });
   }
 
+  var markReadRaf = null;
+  function requestMarkVisibleAsRead(){
+    if(markReadRaf !== null){ return; }
+    markReadRaf = window.requestAnimationFrame(function(){
+      markReadRaf = null;
+      markVisibleAsRead();
+    });
+  }
+
+  function bindScrollHandlers(scope){
+    (scope || document).querySelectorAll('.elxao-chat-messages').forEach(function(box){
+      if(box.__elxaoScrollBound){ return; }
+      box.__elxaoScrollBound = true;
+      box.addEventListener('scroll', requestMarkVisibleAsRead, { passive: true });
+    });
+  }
+
   // Initialise au chargement
   document.addEventListener('DOMContentLoaded', function(){
     initStatuses(document);
+    bindScrollHandlers(document);
     markVisibleAsRead();
   });
 
   // Expose si tu re-rendes dynamiquement
-  window.ELXAO_STATUS_UI = { initStatuses, markVisibleAsRead, refreshFromParticipants };
+  window.ELXAO_STATUS_UI = {
+    initStatuses: function(scope){
+      initStatuses(scope);
+      bindScrollHandlers(scope);
+    },
+    markVisibleAsRead: markVisibleAsRead,
+    refreshFromParticipants: refreshFromParticipants,
+    _bindScrollHandlers: bindScrollHandlers
+  };
 
   document.addEventListener('visibilitychange', function(){
     if(document.visibilityState !== 'hidden'){ markVisibleAsRead(); }
@@ -190,4 +216,33 @@
   window.addEventListener('resize', function(){
     markVisibleAsRead();
   });
+
+  window.addEventListener('focus', function(){
+    requestMarkVisibleAsRead();
+  });
+
+  if (window.MutationObserver) {
+    var mo = new MutationObserver(function(mutations){
+      var shouldMark = false;
+      mutations.forEach(function(mutation){
+        mutation.addedNodes && mutation.addedNodes.forEach(function(node){
+          if(node.nodeType !== 1){ return; }
+          if(node.matches && node.matches('.elxao-chat-window, .elxao-chat-messages')){
+            bindScrollHandlers(node);
+            shouldMark = true;
+            return;
+          }
+          if(node.querySelector){
+            var found = node.querySelector('.elxao-chat-messages');
+            if(found){
+              bindScrollHandlers(node);
+              shouldMark = true;
+            }
+          }
+        });
+      });
+      if(shouldMark){ requestMarkVisibleAsRead(); }
+    });
+    mo.observe(document.documentElement || document.body, { childList: true, subtree: true });
+  }
 })();
