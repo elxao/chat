@@ -370,11 +370,11 @@ add_action('wp_enqueue_scripts', function () {
 
     // Définition des variables CSS globales (icônes + couleurs)
     $tick       = ELXAO_CHAT_URL . 'assets/icons/tick.svg';
-    $tickDouble = ELXAO_CHAT_URL . 'assets/icons/tick-double.svg';
+    $tickDouble = ELXAO_CHAT_URL . 'assets/icons/double-tick.svg';
     $inline_css = "
     :root{
-      --elxao-tick-url: url('{$tick}');
-      --elxao-tick-double-url: url('{$tickDouble}');
+      --elxao-tick-url: url('" . esc_url( $tick ) . "');
+      --elxao-tick-double-url: url('" . esc_url( $tickDouble ) . "');
       --elxao-status-grey: #9aa0a6;
       --elxao-status-blue: #34B7F1;
     }";
