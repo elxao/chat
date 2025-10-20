@@ -112,6 +112,9 @@ add_action( 'wp_ajax_elxao_fetch_messages', function(){
 add_action( 'wp_ajax_elxao_mark_read', function(){
     if ( class_exists('ELXAO_Chat_Ajax') ) ELXAO_Chat_Ajax::mark_read();
 });
+add_action( 'wp_ajax_elxao_inbox_load_chat', function(){
+    if ( class_exists('ELXAO_Chat_Ajax') ) ELXAO_Chat_Ajax::inbox_load_chat();
+});
 
 /* ===== Helpers ===== */
 if ( ! function_exists('elxao_chat_user_can_access') ) {

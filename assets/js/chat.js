@@ -230,23 +230,79 @@
     }
   });
 
-  $(function(){
-    $('.elxao-chat-window').each(function(){
-      var $w=$(this);
-      fetchMessages($w);
-      var baseFreq = (window.ELXAO_CHAT && ELXAO_CHAT.fetchFreq) ? ELXAO_CHAT.fetchFreq : 1500;
-      function schedule(){
-        var freq = document.hidden ? Math.max(baseFreq, 5000) : baseFreq;
-        return setInterval(function(){ fetchMessages($w); }, freq);
-      }
-      var itv = schedule();
-      $w.data('interval', itv);
-      document.addEventListener('visibilitychange', function(){
-        clearInterval(itv); itv = schedule();
-        if(!document.hidden && window.ELXAO_STATUS_UI && typeof window.ELXAO_STATUS_UI.markVisibleAsRead === 'function'){
-          window.ELXAO_STATUS_UI.markVisibleAsRead();
+  function normalizeScope(scope){
+    if(!scope) return $(document);
+    if(scope instanceof jQuery) return scope;
+    return $(scope);
+  }
+
+  function destroyWindow($w){
+    var timer = $w.data('pollTimer');
+    if(timer){
+      clearTimeout(timer);
+      $w.removeData('pollTimer');
+    }
+    var handler = $w.data('visibilityHandler');
+    if(handler){
+      document.removeEventListener('visibilitychange', handler);
+      $w.removeData('visibilityHandler');
+    }
+    $w.removeData('elxaoBootstrapped');
+  }
+
+  function destroyChatWindows(scope){
+    var $scope = normalizeScope(scope);
+    var $wins = $scope.filter('.elxao-chat-window');
+    $wins = $wins.add($scope.find('.elxao-chat-window'));
+    $wins.each(function(){ destroyWindow($(this)); });
+  }
+
+  function bootstrapWindow($w){
+    if($w.data('elxaoBootstrapped')) return;
+    $w.data('elxaoBootstrapped', true);
+
+    var baseFreq = (window.ELXAO_CHAT && ELXAO_CHAT.fetchFreq) ? parseInt(ELXAO_CHAT.fetchFreq,10) : 1500;
+    if(!baseFreq || baseFreq < 300){ baseFreq = 1500; }
+
+    function schedule(){
+      var existing = $w.data('pollTimer');
+      if(existing){ clearTimeout(existing); }
+      var freq = document.hidden ? Math.max(baseFreq, 5000) : baseFreq;
+      var timer = window.setTimeout(function(){
+        if(!$w.closest('body').length){
+          destroyWindow($w);
+          return;
         }
-      });
-    });
+        fetchMessages($w);
+        schedule();
+      }, freq);
+      $w.data('pollTimer', timer);
+    }
+
+    var visibilityHandler = function(){
+      schedule();
+      if(!document.hidden && window.ELXAO_STATUS_UI && typeof window.ELXAO_STATUS_UI.markVisibleAsRead === 'function'){
+        window.ELXAO_STATUS_UI.markVisibleAsRead();
+      }
+    };
+    $w.data('visibilityHandler', visibilityHandler);
+    document.addEventListener('visibilitychange', visibilityHandler);
+
+    fetchMessages($w);
+    schedule();
+  }
+
+  function bootstrapChatWindows(scope){
+    var $scope = normalizeScope(scope);
+    var $wins = $scope.filter('.elxao-chat-window');
+    $wins = $wins.add($scope.find('.elxao-chat-window'));
+    $wins.each(function(){ bootstrapWindow($(this)); });
+  }
+
+  window.ELXAO_CHAT_BOOTSTRAP = function(scope){ bootstrapChatWindows(scope); };
+  window.ELXAO_CHAT_DESTROY = function(scope){ destroyChatWindows(scope); };
+
+  $(function(){
+    bootstrapChatWindows(document);
   });
 })(jQuery);
