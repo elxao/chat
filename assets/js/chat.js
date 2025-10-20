@@ -64,6 +64,7 @@
   window.appendUnique = function($box,msgs){
     var fragHTML = '';
     var maxId = parseInt($box.attr('data-last')||'0',10);
+    var appendedMessages = [];
     for (var i=0;i<msgs.length;i++){
       var m = msgs[i];
       var $existing = $box.find('.elxao-chat-message[data-id="'+m.id+'"]');
@@ -80,6 +81,7 @@
         continue;
       }
       fragHTML += renderMessage(m);
+      appendedMessages.push(m);
       if(m.id>maxId) maxId=m.id;
     }
     if (fragHTML){
@@ -89,6 +91,15 @@
     $box.attr('data-last', maxId);
     if(window.ELXAO_STATUS_UI && typeof window.ELXAO_STATUS_UI.initStatuses === 'function'){
       window.ELXAO_STATUS_UI.initStatuses($box[0]);
+    }
+    if (appendedMessages.length){
+      var $win = $box.closest('.elxao-chat-window');
+      var chatId = $win.length ? parseInt($win.data('chat'), 10) : null;
+      $box.trigger('elxao:messages-appended', {
+        messages: appendedMessages,
+        chatId: chatId,
+        window: $win
+      });
     }
   };
 
