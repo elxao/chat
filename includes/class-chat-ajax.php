@@ -23,25 +23,65 @@ class ELXAO_Chat_Ajax {
             : [];
     }
 
-    private static function resolve_role( $chat_id, $user_id, $participants ) {
+    private static function resolve_role( $chat_id, $user_id, $participants, $pm_id = 0, $client_id = 0 ) {
         if ( isset( $participants[ $user_id ]['role'] ) ) {
             return $participants[ $user_id ]['role'];
         }
-        if ( function_exists( 'elxao_chat_get_user_role_in_chat' ) ) {
-            return elxao_chat_get_user_role_in_chat( $chat_id, $user_id );
+
+        if ( $pm_id && $user_id === $pm_id ) {
+            return 'pm';
         }
-        return null;
+
+        if ( $client_id && $user_id === $client_id ) {
+            return 'client';
+        }
+
+        if ( function_exists( 'elxao_chat_get_user_role_in_chat' ) ) {
+            $role = elxao_chat_get_user_role_in_chat( $chat_id, $user_id );
+            if ( $role ) {
+                return $role;
+            }
+        }
+
+        if ( function_exists( 'user_can' ) && user_can( $user_id, 'administrator' ) ) {
+            return 'admin';
+        }
+
+        return ( $user_id !== $pm_id && $user_id !== $client_id ) ? 'admin' : null;
     }
 
     private static function status_payload( $message_id, $sender_role, $participants, $pm_id, $client_id, $is_mine ) {
-        $client_state = $client_id ? ( $participants[ $client_id ] ?? null ) : null;
-        $pm_state     = $pm_id ? ( $participants[ $pm_id ] ?? null ) : null;
+        $client_state = $client_id ? ( $participants[ $client_id ] ?? [ 'last_delivered' => 0, 'last_read' => 0 ] ) : null;
+        $pm_state     = $pm_id ? ( $participants[ $pm_id ] ?? [ 'last_delivered' => 0, 'last_read' => 0 ] ) : null;
+
+        $client_delivered = $client_state ? ( $client_state['last_delivered'] >= $message_id ) : false;
+        $client_read      = $client_state ? ( $client_state['last_read'] >= $message_id ) : false;
+        $pm_delivered     = $pm_state ? ( $pm_state['last_delivered'] >= $message_id ) : false;
+        $pm_read          = $pm_state ? ( $pm_state['last_read'] >= $message_id ) : false;
+
+        $recipient_breakdown = [];
+
+        if ( $client_id ) {
+            $recipient_breakdown['client'] = [
+                'delivered' => $client_delivered,
+                'read'      => $client_read,
+            ];
+        }
+
+        if ( $pm_id ) {
+            $recipient_breakdown['pm'] = [
+                'delivered' => $pm_delivered,
+                'read'      => $pm_read,
+            ];
+        }
+
+        $include_breakdown = ( ! $sender_role || 'admin' === $sender_role );
 
         $result = [
             'status'              => $is_mine ? 'sent' : '',
             'delivered'           => false,
             'read'                => false,
-            'recipient_breakdown' => [],
+            'recipient_breakdown' => $include_breakdown ? $recipient_breakdown : [],
         ];
 
         if ( ! $is_mine ) {
@@ -49,70 +89,41 @@ class ELXAO_Chat_Ajax {
         }
 
         if ( 'pm' === $sender_role ) {
-            $dest = $client_state;
-        } elseif ( 'client' === $sender_role ) {
-            $dest = $pm_state;
-        } elseif ( 'admin' === $sender_role ) {
-            $result['recipient_breakdown']['client'] = [
-                'delivered' => $client_state ? ( $client_state['last_delivered'] >= $message_id ) : false,
-                'read'      => $client_state ? ( $client_state['last_read'] >= $message_id ) : false,
-            ];
-            $result['recipient_breakdown']['pm'] = [
-                'delivered' => $pm_state ? ( $pm_state['last_delivered'] >= $message_id ) : false,
-                'read'      => $pm_state ? ( $pm_state['last_read'] >= $message_id ) : false,
-            ];
-            $targets       = [];
-            $has_target    = false;
-            $all_delivered = true;
-            $all_read      = true;
-
-            if ( $client_id ) {
-                $targets[] = $client_state;
-            }
-            if ( $pm_id ) {
-                $targets[] = $pm_state;
-            }
-
-            foreach ( $targets as $target ) {
-                if ( ! $target ) {
-                    $all_delivered = false;
-                    $all_read      = false;
-                    continue;
-                }
-                $has_target = true;
-                if ( $target['last_delivered'] < $message_id ) {
-                    $all_delivered = false;
-                }
-                if ( $target['last_read'] < $message_id ) {
-                    $all_read = false;
-                }
-            }
-
-            if ( $has_target && $all_read ) {
+            if ( $client_read ) {
                 $result['status']    = 'read';
                 $result['delivered'] = true;
                 $result['read']      = true;
-            } elseif ( $has_target && $all_delivered ) {
+            } elseif ( $client_delivered ) {
                 $result['status']    = 'delivered';
                 $result['delivered'] = true;
-            } else {
-                $result['status'] = 'sent';
             }
 
             return $result;
-        } else {
-            $dest = null;
         }
 
-        if ( $dest ) {
-            if ( $dest['last_read'] >= $message_id ) {
+        if ( 'client' === $sender_role ) {
+            if ( $pm_read ) {
                 $result['status']    = 'read';
                 $result['delivered'] = true;
                 $result['read']      = true;
-            } elseif ( $dest['last_delivered'] >= $message_id ) {
+            } elseif ( $pm_delivered ) {
                 $result['status']    = 'delivered';
                 $result['delivered'] = true;
             }
+
+            return $result;
+        }
+
+        $any_delivered = ( $client_delivered || $pm_delivered );
+        $any_read      = ( $client_read || $pm_read );
+
+        if ( $any_read ) {
+            $result['status']    = 'read';
+            $result['delivered'] = true;
+            $result['read']      = true;
+        } elseif ( $any_delivered ) {
+            $result['status']    = 'delivered';
+            $result['delivered'] = true;
         }
 
         return $result;
@@ -255,7 +266,7 @@ class ELXAO_Chat_Ajax {
             $id        = (int) $row['id'];
             $sender_id = (int) $row['sender_id'];
             $mine      = ( $sender_id === $user_id );
-            $role      = self::resolve_role( $chat_id, $sender_id, $participants );
+            $role      = self::resolve_role( $chat_id, $sender_id, $participants, $pm_id, $client_id );
             if ( $role ) {
                 if ( function_exists( 'elxao_chat_ensure_participant' ) ) {
                     elxao_chat_ensure_participant( $chat_id, $sender_id, $role );
