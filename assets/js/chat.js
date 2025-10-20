@@ -92,6 +92,94 @@
     }
   };
 
+  function ensureStatusUI($box){
+    if(window.ELXAO_STATUS_UI){
+      if(typeof window.ELXAO_STATUS_UI.initStatuses === 'function'){
+        window.ELXAO_STATUS_UI.initStatuses($box[0]);
+      }
+      if(typeof window.ELXAO_STATUS_UI.markVisibleAsRead === 'function'){
+        window.requestAnimationFrame(function(){ window.ELXAO_STATUS_UI.markVisibleAsRead(); });
+      }
+    }
+  }
+
+  function markMessagesAsRead($win){
+    if(!window.ELXAO_CHAT){ return; }
+    var $box=$win.find('.elxao-chat-messages');
+    var ids=$box.find('.elxao-chat-message').map(function(){ return parseInt($(this).attr('data-id'),10)||0; }).get();
+    if(!ids.length){ return; }
+    var max=0;
+    for(var i=0;i<ids.length;i++){ if(ids[i]>max) max=ids[i]; }
+    if(!max){ return; }
+    safeJSONPost({action:'elxao_mark_read',nonce:(ELXAO_CHAT?ELXAO_CHAT.nonce:''),chat_id:parseInt($win.data('chat'),10),last_id:max});
+  }
+
+  function handleMessages($win, msgs){
+    var $box=$win.find('.elxao-chat-messages');
+    if(msgs && msgs.length){
+      window.appendUnique($box,msgs);
+    }
+    ensureStatusUI($box);
+    window.requestAnimationFrame(function(){ markMessagesAsRead($win); });
+    if(supportsRealtime() && !$win.data('stream')){
+      var stream = openRealtimeStream($win);
+      if(stream){
+        $win.data('stream', stream);
+      }
+    }
+  }
+
+  function supportsRealtime(){
+    return !!(window.EventSource && window.ELXAO_CHAT && ELXAO_CHAT.realtime && ELXAO_CHAT.realtime.enabled && ELXAO_CHAT.realtime.endpoint);
+  }
+
+  function buildStreamUrl(chatId, lastId){
+    var endpoint = ELXAO_CHAT.realtime.endpoint;
+    var params = ['chat_id='+encodeURIComponent(chatId), 'nonce='+encodeURIComponent(ELXAO_CHAT.nonce||'')];
+    if(lastId){ params.push('last_id='+encodeURIComponent(lastId)); }
+    return endpoint + (endpoint.indexOf('?') === -1 ? '?' : '&') + params.join('&');
+  }
+
+  function openRealtimeStream($win){
+    if(!supportsRealtime()){ return null; }
+    var chatId=parseInt($win.data('chat'),10);
+    if(!chatId){ return null; }
+    var $box=$win.find('.elxao-chat-messages');
+    var lastId=parseInt($box.attr('data-last')||'0',10);
+    var url = buildStreamUrl(chatId, lastId);
+    var source;
+    try {
+      source = new EventSource(url);
+    } catch(err){
+      return null;
+    }
+
+    source.addEventListener('messages', function(evt){
+      if(!evt || !evt.data){ return; }
+      try {
+        var payload = JSON.parse(evt.data);
+        if(payload && payload.messages){
+          handleMessages($win, payload.messages);
+          if(payload.meta && payload.meta.newest_id){
+            $box.attr('data-last', payload.meta.newest_id);
+          }
+        }
+      } catch(e){
+        if(window.console && console.warn){ console.warn('ELXAO chat stream parse error', e); }
+      }
+    });
+
+    source.addEventListener('open', function(){
+      $win.trigger('elxao:stream-open');
+    });
+
+    source.addEventListener('error', function(){
+      $win.trigger('elxao:stream-error');
+    });
+
+    return source;
+  }
+
   function fetchMessages($win){
     if($win.data('loading')) return;
     $win.data('loading',true);
@@ -102,18 +190,7 @@
       $win.data('loading',false);
       $box.find('.elxao-chat-loading').remove();
       var msgs = (resp && resp.data && resp.data.messages) ? resp.data.messages : [];
-      if(msgs.length){ window.appendUnique($box,msgs); }
-      if(window.ELXAO_STATUS_UI){
-        if(typeof window.ELXAO_STATUS_UI.initStatuses === 'function'){ window.ELXAO_STATUS_UI.initStatuses($box[0]); }
-        if(typeof window.ELXAO_STATUS_UI.markVisibleAsRead === 'function'){
-          window.requestAnimationFrame(function(){ window.ELXAO_STATUS_UI.markVisibleAsRead(); });
-        }
-      }
-      var ids = $box.find('.elxao-chat-message').map(function(){ return parseInt($(this).attr('data-id'),10)||0; }).get();
-      if(ids.length){
-        var max=ids[0]; for(var i=1;i<ids.length;i++){ if(ids[i]>max) max=ids[i]; }
-        safeJSONPost({action:'elxao_mark_read',nonce:(ELXAO_CHAT?ELXAO_CHAT.nonce:''),chat_id:chatId,last_id:max});
-      }
+      handleMessages($win, msgs);
     }, function(){
       $win.data('loading',false);
       $box.find('.elxao-chat-loading').remove();
@@ -144,16 +221,43 @@
   $(function(){
     $('.elxao-chat-window').each(function(){
       var $w=$(this);
-      fetchMessages($w);
-      var baseFreq = (window.ELXAO_CHAT && ELXAO_CHAT.fetchFreq) ? ELXAO_CHAT.fetchFreq : 1500;
+      var baseFreq = (window.ELXAO_CHAT && ELXAO_CHAT.fetchFreq) ? ELXAO_CHAT.fetchFreq : 4000;
+      var fallbackFreq = (window.ELXAO_CHAT && ELXAO_CHAT.realtime && ELXAO_CHAT.realtime.fallbackFreq) ? ELXAO_CHAT.realtime.fallbackFreq : Math.max(baseFreq, 15000);
+      var pollFreq = baseFreq;
+      var poller = null;
+
       function schedule(){
-        var freq = document.hidden ? Math.max(baseFreq, 5000) : baseFreq;
-        return setInterval(function(){ fetchMessages($w); }, freq);
+        if(poller){ clearInterval(poller); }
+        var freq = document.hidden ? Math.max(pollFreq, fallbackFreq) : pollFreq;
+        poller = setInterval(function(){ fetchMessages($w); }, freq);
+        $w.data('interval', poller);
       }
-      var itv = schedule();
-      $w.data('interval', itv);
+
+      fetchMessages($w);
+      schedule();
+
       document.addEventListener('visibilitychange', function(){
-        clearInterval(itv); itv = schedule();
+        if(poller){ schedule(); }
+      });
+
+      if(supportsRealtime()){
+        $w.on('elxao:stream-open', function(){
+          pollFreq = fallbackFreq;
+          schedule();
+        });
+        $w.on('elxao:stream-error', function(){
+          pollFreq = baseFreq;
+          schedule();
+        });
+      }
+    });
+
+    $(window).on('beforeunload', function(){
+      $('.elxao-chat-window').each(function(){
+        var stream = $(this).data('stream');
+        if(stream && typeof stream.close === 'function'){
+          stream.close();
+        }
       });
     });
   });
