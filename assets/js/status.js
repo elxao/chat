@@ -37,6 +37,98 @@
     });
   }
 
+  function isFiniteNumber(n){
+    if (Number.isFinite) {
+      return Number.isFinite(n);
+    }
+    return isFinite(n);
+  }
+
+  function toInt(value){
+    var n = parseInt(value, 10);
+    return isFiniteNumber(n) ? n : 0;
+  }
+
+  function normalizeState(entry){
+    if(!entry) return null;
+    return {
+      role: entry.role || '',
+      last_delivered: toInt(entry.last_delivered),
+      last_read: toInt(entry.last_read)
+    };
+  }
+
+  function statusFromTarget(messageId, target){
+    if(!target) return null;
+    if(target.last_read >= messageId) return 'read';
+    if(target.last_delivered >= messageId) return 'delivered';
+    return 'sent';
+  }
+
+  function computeStatusFromParticipants(node, participants){
+    if(!participants || !node) return null;
+    if(node.getAttribute('data-incoming') === '1') return null;
+    var messageId = parseInt(node.getAttribute('data-id'), 10);
+    if(!isFiniteNumber(messageId)) return null;
+    var role = node.getAttribute('data-sender-role');
+    if(!role) return null;
+
+    var client = normalizeState(participants.client);
+    var pm = normalizeState(participants.pm);
+    var adminStates = [];
+    if(Array.isArray(participants.admins)){
+      participants.admins.forEach(function(entry){
+        var norm = normalizeState(entry);
+        if(norm){ adminStates.push(norm); }
+      });
+    }
+
+    if(role === 'pm'){
+      return statusFromTarget(messageId, client);
+    }
+    if(role === 'client'){
+      return statusFromTarget(messageId, pm);
+    }
+    if(role === 'admin'){
+      var targets = [];
+      if(client) targets.push(client);
+      if(pm) targets.push(pm);
+      if(!targets.length) return null;
+      var allDelivered = targets.every(function(target){ return target.last_delivered >= messageId; });
+      var allRead = targets.every(function(target){ return target.last_read >= messageId; });
+      if(allRead) return 'read';
+      if(allDelivered) return 'delivered';
+      return 'sent';
+    }
+
+    // Fallback: try to locate matching participant by role name
+    if(participants[role] && !Array.isArray(participants[role])){
+      return statusFromTarget(messageId, normalizeState(participants[role]));
+    }
+
+    // Or by matching admins with same role hint
+    var matchingAdmin = null;
+    for(var i=0;i<adminStates.length;i++){
+      if(adminStates[i].role === role){ matchingAdmin = adminStates[i]; break; }
+    }
+    if(matchingAdmin){
+      return statusFromTarget(messageId, matchingAdmin);
+    }
+
+    return null;
+  }
+
+  function refreshFromParticipants(win, participants){
+    if(!win || !participants) return;
+    var scope = win.querySelector('.elxao-chat-messages') || win;
+    scope.querySelectorAll('.elxao-message').forEach(function(node){
+      var status = computeStatusFromParticipants(node, participants);
+      if(!status) return;
+      node.setAttribute('data-status', status);
+    });
+    initStatuses(scope);
+  }
+
   function isAtBottom(box){
     if(!box) return false;
     var diff = box.scrollHeight - box.scrollTop - box.clientHeight;
@@ -83,7 +175,7 @@
   });
 
   // Expose si tu re-rendes dynamiquement
-  window.ELXAO_STATUS_UI = { initStatuses, markVisibleAsRead };
+  window.ELXAO_STATUS_UI = { initStatuses, markVisibleAsRead, refreshFromParticipants };
 
   document.addEventListener('visibilitychange', function(){
     if(document.visibilityState !== 'hidden'){ markVisibleAsRead(); }
