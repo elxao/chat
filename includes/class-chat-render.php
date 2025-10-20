@@ -26,7 +26,8 @@ class ELXAO_Chat_Render {
         if ( ! $project_id ) $project_id = (int) ( $_GET['project_id'] ?? 0 );
         if ( ! $project_id ) return '<div class="elxao-chat-error">No project_id provided.</div>';
         if ( ! is_user_logged_in() ) return '<div class="elxao-chat-error">Please log in to use the project chat.</div>';
-        $user_id = get_current_user_id(); if ( ! elxao_chat_user_can_access( $project_id, $user_id ) ) return '<div class="elxao-chat-error">You do not have access to this chat.</div>';
+        $user_id = get_current_user_id();
+        $role = function_exists('elxao_chat_get_user_role_in_chat') ? elxao_chat_get_user_role_in_chat( $project_id, $user_id ) : 'client'; if ( ! elxao_chat_user_can_access( $project_id, $user_id ) ) return '<div class="elxao-chat-error">You do not have access to this chat.</div>';
         $chat_id = elxao_chat_get_or_create_chat_for_project( $project_id ); if ( ! $chat_id ) return '<div class="elxao-chat-error">Unable to initialize chat for this project.</div>';
         self::enqueue_assets( $chat_id );
         ob_start(); ?>

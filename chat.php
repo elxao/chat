@@ -2,13 +2,13 @@
 /*
 Plugin Name: Chat
 Description: Private per-project chat (client, PM, admin) with read receipts and WhatsApp-style inbox sorting.
-Version: 1.4.4
+Version: 1.4.6
 Author: ELXAO
 */
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-if ( ! defined('ELXAO_CHAT_VERSION') ) define( 'ELXAO_CHAT_VERSION', '1.4.4' );
+if ( ! defined('ELXAO_CHAT_VERSION') ) define( 'ELXAO_CHAT_VERSION', '1.4.6' );
 if ( ! defined('ELXAO_CHAT_DIR') ) define( 'ELXAO_CHAT_DIR', plugin_dir_path( __FILE__ ) );
 if ( ! defined('ELXAO_CHAT_URL') ) define( 'ELXAO_CHAT_URL', plugin_dir_url( __FILE__ ) );
 if ( ! defined('ELXAO_CHAT_TABLE') ) define( 'ELXAO_CHAT_TABLE', 'elxao_chat_messages' );
@@ -358,45 +358,7 @@ add_action('wp_footer', function () {
 });
 
 
-/* ===== NEW: Message status assets (sent/delivered/read) ===== */
-add_action('wp_enqueue_scripts', function () {
-    $css_handle = 'elxao-chat-status';
-    $js_handle  = 'elxao-chat-status';
 
-    // Enqueue CSS
-    wp_enqueue_style(
-      $css_handle,
-      ELXAO_CHAT_URL . 'assets/css/status.css',
-      [],
-      ELXAO_CHAT_VERSION
-    );
-
-    // Définition des variables CSS globales (icônes + couleurs)
-    $tick       = ELXAO_CHAT_URL . 'assets/icons/tick.svg';
-    $tickDouble = ELXAO_CHAT_URL . 'assets/icons/double-tick.svg';
-    $inline_css = "
-    :root{
-      --elxao-tick-url: url('" . esc_url( $tick ) . "');
-      --elxao-tick-double-url: url('" . esc_url( $tickDouble ) . "');
-      --elxao-status-grey: #9aa0a6;
-      --elxao-status-blue: #34B7F1;
-    }";
-    wp_add_inline_style($css_handle, $inline_css);
-
-    // Enqueue JS
-    wp_enqueue_script(
-      $js_handle,
-      ELXAO_CHAT_URL . 'assets/js/status.js',
-      [],
-      ELXAO_CHAT_VERSION,
-      true
-    );
-
-    wp_localize_script($js_handle, 'ELXAO_STATUS', [
-      'restUrl' => esc_url_raw( rest_url('elxao/v1/messages/read') ),
-      'nonce'   => wp_create_nonce('wp_rest'),
-    ]);
-});
 
 /* ===== Include REST endpoint for read receipts ===== */
 require_once ELXAO_CHAT_DIR . 'includes/rest-status.php';
