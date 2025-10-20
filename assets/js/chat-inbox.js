@@ -15,8 +15,12 @@
   }
   function minimalRender(m){
     var cls='elxao-chat-message'; if(m.mine) cls+=' me';
+    var attrs=' data-id="'+m.id+'"';
+    if(typeof m.incoming !== 'undefined'){ attrs += ' data-incoming="'+(m.incoming ? '1':'0')+'"'; }
+    if(m.status){ attrs += ' data-status="'+m.status+'"'; }
+    if(m.sender_role){ attrs += ' data-sender-role="'+m.sender_role+'"'; }
     var meta = '<div class="elxao-chat-meta">'+(m.sender||'')+' • '+(m.time||'')+'</div>';
-    return '<div class="'+cls+'" data-id="'+m.id+'"><div class="bubble"><div class="text">'+m.message+'</div>'+meta+'</div></div>';
+    return '<div class="'+cls+'"'+attrs+'><div class="bubble"><div class="text">'+m.message+'</div>'+meta+'</div></div>';
   }
   function appendMsgs($box, msgs){
     if (typeof window.appendUnique === 'function'){ window.appendUnique($box, msgs); return; }
