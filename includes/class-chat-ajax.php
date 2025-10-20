@@ -118,7 +118,6 @@ class ELXAO_Chat_Ajax {
                 'sender'       => self::fmt((int)$r['sender_id']),
                 'message'      => wpautop($r['message']),
                 'time'         => mysql2date('Y-m-d H:i', $r['created_at'], true ),
-                'timestamp'    => (int) mysql2date('U', $r['created_at'], false ),
                 'mine'         => $mine,
                 'incoming'     => $mine ? 0 : 1,
                 'status'       => $status,
