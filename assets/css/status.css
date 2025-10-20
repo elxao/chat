@@ -1,0 +1,43 @@
+/* Status ticks for ELXAO Chat */
+
+.elxao-msg-status{
+  display:inline-flex;
+  align-items:center;
+  margin-left:6px;
+  vertical-align:middle;
+  opacity:0.9;
+  font-size:0; /* icône only */
+}
+
+/* L’icône = carré masqué par le SVG, teinté par background-color */
+.elxao-msg-status .icon{
+  width:16px;
+  height:16px;
+  display:inline-block;
+  background-color: var(--elxao-status-grey, #9aa0a6);
+  -webkit-mask-repeat:no-repeat;
+  -webkit-mask-position:center;
+  -webkit-mask-size:contain;
+          mask-repeat:no-repeat;
+          mask-position:center;
+          mask-size:contain;
+}
+
+/* États */
+.elxao-msg-status.sent .icon{
+  -webkit-mask-image: var(--elxao-tick-url);
+          mask-image: var(--elxao-tick-url);
+}
+.elxao-msg-status.delivered .icon{
+  -webkit-mask-image: var(--elxao-tick-double-url);
+          mask-image: var(--elxao-tick-double-url);
+}
+.elxao-msg-status.read .icon{
+  -webkit-mask-image: var(--elxao-tick-double-url);
+          mask-image: var(--elxao-tick-double-url);
+  background-color: var(--elxao-status-blue, #34B7F1);
+}
+
+.elxao-msg-status.sent{ opacity:.7 }
+.elxao-msg-status.delivered{ opacity:.85 }
+.elxao-msg-status.read{ opacity:1 }
