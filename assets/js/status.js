@@ -142,10 +142,16 @@
     box.querySelectorAll('.elxao-message[data-id][data-incoming="1"]').forEach(function(node){
       if(node.offsetParent === null) return;
       var rect = node.getBoundingClientRect();
-      if(rect.bottom <= containerRect.bottom + 1 && rect.top >= containerRect.top - 1){
-        var id = parseInt(node.getAttribute('data-id'), 10);
-        if(Number.isFinite(id) && id > maxId){ maxId = id; }
-      }
+      var overlapTop = Math.max(rect.top, containerRect.top);
+      var overlapBottom = Math.min(rect.bottom, containerRect.bottom);
+      var visibleHeight = overlapBottom - overlapTop;
+      var nodeHeight = rect.height || (rect.bottom - rect.top);
+      if(visibleHeight <= 0) return;
+      if(nodeHeight <= 0) return;
+      var ratio = visibleHeight / nodeHeight;
+      if(ratio < 0.25) return;
+      var id = parseInt(node.getAttribute('data-id'), 10);
+      if(isFiniteNumber(id) && id > maxId){ maxId = id; }
     });
     return maxId;
   }
@@ -179,5 +185,9 @@
 
   document.addEventListener('visibilitychange', function(){
     if(document.visibilityState !== 'hidden'){ markVisibleAsRead(); }
+  });
+
+  window.addEventListener('resize', function(){
+    markVisibleAsRead();
   });
 })();
